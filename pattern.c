@@ -681,10 +681,12 @@ int merge_kd(AccessPattern** kdpattern_head, int k){
 				//delete patterns that were merged
 				AccessPattern* pattern_tmp = NULL;
 				int tmpstartpos = pattern_i->startPos;
+				int tmp_rank = pattern_i->mpiRank;
 
 				if(hasmerge!=0){
 					DL_FOREACH_SAFE(*kdpattern_head, pattern_t, pattern_tmp){
-						if(pattern_t->patternType == KD_STRIDED && pattern_t->startPos == tmpstartpos + tmpstridesize){
+						if(pattern_t->mpiRank == tmp_rank && pattern_t->patternType == KD_STRIDED
+										&& pattern_t->startPos == tmpstartpos + tmpstridesize){
 							DL_DELETE(*kdpattern_head, pattern_t);
 							tmpstartpos = tmpstartpos + tmpstridesize;
 						}

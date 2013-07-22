@@ -15,4 +15,7 @@
 *.exe
 *.out
 *.app
+
+# Misc
 analyzer
+*~
