@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include "patterndef.h"
 #include "utlist.h"
+#include "uthash.h"
 
 
 int qsort_compare (const void *a, const void *b) {
@@ -29,8 +30,10 @@ int main(int argc, char *argv[]) {
 	// store all traces
 	TraceList *adio_write_list_head = NULL;
 	TraceList *adio_read_list_head = NULL;
-	AccessPattern *pattern_head = NULL;
-	AccessPattern *elt, *etmp, *list_i;
+	AccessPattern *pattern_head = NULL, *list_i;
+
+	// look up hash table
+	UT_lookup *lookup = NULL;
 
 	if(argc != 3){
 		printf("Usage: analyzer input_filename output_filename\n");
@@ -38,7 +41,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	//read from file and perform analysis
-	read_radar(argv[1], &adio_write_list_head, &adio_read_list_head, &pattern_head, &totalbytes);
+	read_radar(argv[1], &adio_write_list_head, &adio_read_list_head, &pattern_head, &totalbytes, &lookup);
 
 	//merge kd patterns
 	for(i = 2; i <= PATTERN_K_SIZE_MAX; i++){
@@ -112,9 +115,11 @@ int main(int argc, char *argv[]) {
 
 
 	//clean up to analyze next process's trace records
-	DL_FOREACH_SAFE(pattern_head,elt,etmp) {
-		  DL_DELETE(pattern_head,elt);
+	AccessPattern *elt, *etmp;
+	DL_FOREACH_SAFE(pattern_head, elt, etmp) {
+		  DL_DELETE(pattern_head, elt);
 	}
+
 
 
 /*

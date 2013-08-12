@@ -10,8 +10,10 @@
 #include <string.h>
 #include "patterndef.h"
 #include "utlist.h"
+#include "uthash.h"
 
-int read_radar(char* filename, TraceList** write_list, TraceList** read_list, AccessPattern** access_pattern, int* totalbytesrw){
+int read_radar(char* filename, TraceList** write_list, TraceList** read_list, AccessPattern** access_pattern
+		, int* totalbytesrw, UT_lookup **lookup){
 
 	char buf[MAX_LINE_LENGTH];
 	FILE* fp = NULL;
@@ -66,7 +68,7 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 							TraceList *tmp = addtmp(filepos, size, T_ADIO_READ, opStep++, timedelta, mpirank);
 							if(tmp==NULL)
 								return -1;
-							trace_analyzer(read_list, tmp, access_pattern, &read_count, mpirank);
+							trace_analyzer(read_list, tmp, access_pattern, &read_count, mpirank, lookup);
 							//just like below
 						}
 						else if(strstr(operator,"Write") != NULL){
@@ -74,7 +76,7 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 							TraceList *tmp = addtmp(filepos, size, T_ADIO_WRITE, opStep++, timedelta, mpirank);
 							if(tmp==NULL)
 								return -1;
-							trace_analyzer(write_list, tmp, access_pattern, &write_count, mpirank);
+							trace_analyzer(write_list, tmp, access_pattern, &write_count, mpirank, lookup);
 						}
 
 					}
@@ -82,8 +84,8 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 				}
 
 				//perform final analysis when reach end of each process
-				trace_analyzer(read_list, NULL, access_pattern, &read_count, mpirank);
-				trace_analyzer(write_list, NULL, access_pattern, &write_count, mpirank);
+				trace_analyzer(read_list, NULL, access_pattern, &read_count, mpirank, lookup);
+				trace_analyzer(write_list, NULL, access_pattern, &write_count, mpirank, lookup);
 
 
 				read_count = 0;
@@ -97,6 +99,12 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 				}
 				DL_FOREACH_SAFE(*write_list,elt,etmp) {
 					  DL_DELETE(*write_list,elt);
+				}
+				// clean up hash table
+				UT_lookup *current_lookup, *tmp;
+				HASH_ITER(hh, *lookup, current_lookup, tmp) {
+					HASH_DEL(*lookup,current_lookup);  /* delete it (users advances to next) */
+					free(current_lookup);            /* free it */
 				}
 
 			}
@@ -147,7 +155,8 @@ int contig_check(TraceList* trace, AccessPattern* pattern){
 int stride_check(TraceList* trace, AccessPattern* pattern){
 
 	//TODO support for same offset but different size
-	if(trace->mpirank == pattern->mpiRank && trace->offset == pattern->endPos  + pattern->strideSize[0] && trace->size == pattern->reqSize)
+	if(trace->mpirank == pattern->mpiRank && trace->offset == pattern->endPos  + pattern->strideSize[0]
+	         && trace->size == pattern->reqSize)
 		return 1;
 	else
 		return 0;
@@ -238,7 +247,7 @@ int pattern_repeat(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 	return 1;
 }
 
-int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpirank){
+int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup){
 	TraceList* list_i = *tracelist;
 	int tmpendtime = 0;
 	int isseq = 0;
@@ -318,6 +327,16 @@ int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 					oldnext = old->next;
 				}
 
+				// add to look up hash table
+				UT_lookup *tmp = (UT_lookup*)malloc( sizeof(UT_lookup) );
+			    memset(tmp, 0, sizeof(UT_lookup));
+				tmp->key.op = contig_pattern->operation;
+				tmp->key.mpirank = contig_pattern->mpiRank;
+				tmp->key.off = contig_pattern->endPos + contig_pattern->reqSize;
+				tmp->pattern = contig_pattern;
+
+			    HASH_ADD(hh, *lookup, key, sizeof(Lookup_key), tmp);
+
 				// if one contig pattern is found then return
 				return contig_pattern->recordNum[0];
 			}
@@ -332,7 +351,7 @@ int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 	return 0;
 }
 
-int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank){
+int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup){
 
 	TraceList* list_i = *tracelist;
 	TraceList* list_j = NULL;
@@ -419,6 +438,16 @@ int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, in
 					oldnext = old->next;
 				}
 
+				// add to look up hash table
+				UT_lookup *tmp = (UT_lookup*)malloc( sizeof(UT_lookup) );
+			    memset(tmp, 0, sizeof(UT_lookup));
+				tmp->key.op = stride_pattern->operation;
+				tmp->key.mpirank = stride_pattern->mpiRank;
+				tmp->key.off = stride_pattern->endPos + stride_pattern->strideSize[0];
+				tmp->pattern = stride_pattern;
+
+			    HASH_ADD(hh, *lookup, key, sizeof(Lookup_key), tmp);
+
 				// if one stride pattern is found then return
 				return stride_pattern->recordNum[0];
 			}
@@ -432,6 +461,84 @@ int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, in
 
 
 	return 0;
+}
+
+int trace_lookup(TraceList** tracelist, TraceList* new_record, UT_lookup **lookup, int mpirank){
+
+	int findpattern = 0;
+
+	UT_lookup *tmp = (UT_lookup*)malloc( sizeof(UT_lookup) );
+	if(tmp==NULL){
+		printf("Malloc Error!\n");
+		return -1;
+	}
+	UT_lookup *found = NULL;
+
+    memset(tmp, 0, sizeof(UT_lookup));
+	tmp->key.op = new_record->op;
+	tmp->key.off = new_record->offset;
+	tmp->key.mpirank = new_record->mpirank;
+
+	// look up
+	HASH_FIND(hh, *lookup, &tmp->key, sizeof(Lookup_key), found);
+
+	// found corresponding pattern
+	if(found != NULL){
+		// update pattern and hash table
+		if(found->pattern->patternType== CONTIGUOUS || found->pattern->patternType == SEQUENTIAL){
+			found->pattern->recordNum[0] ++;
+			found->pattern->endPos = new_record->offset;
+			found->pattern->reqSize = new_record->size;
+
+			if(found->pattern->patternType == SEQUENTIAL){
+				found->pattern->reqOffesets[found->pattern->recordNum[0]-1] = new_record->size;
+			}
+
+			tmp->key.off = new_record->offset + new_record->size;
+			tmp->pattern = found->pattern;
+
+			HASH_DEL(*lookup, found);
+		    HASH_ADD(hh, *lookup, key, sizeof(Lookup_key), tmp);
+
+			findpattern++;
+		}
+		else if(found->pattern->patternType == KD_STRIDED){
+			found->pattern->recordNum[0] ++;
+			found->pattern->endPos = new_record->offset;
+
+			tmp->key.off = new_record->offset + found->pattern->strideSize[0];
+			tmp->pattern = found->pattern;
+
+			HASH_DEL(*lookup, found);
+		    HASH_ADD(hh, *lookup, key, sizeof(Lookup_key), tmp);
+
+			findpattern++;
+
+		}
+		else if(found->pattern->patternType == REPEAT){
+			found->pattern->recordNum[0] ++;
+			found->pattern->endPos = new_record->offset;
+			findpattern++;
+
+			HASH_DEL( *lookup, found);
+
+		}
+
+	}
+
+	if(findpattern == 0){
+		if(new_record==NULL){
+			printf("Can't feed NULL!\n");
+			return 0;
+		}
+
+		// if no pattern fit then add to trace list
+		DL_APPEND(*tracelist, new_record);
+		free(tmp);
+
+	}
+
+	return findpattern;
 }
 
 int trace_feed(TraceList** tracelist, TraceList* new_record, AccessPattern** pattern_head, int mpirank){
@@ -581,7 +688,8 @@ int merge_markov(AccessPattern** pattern_head, Markovpattern** markov_head){
 int check_pattern_same(AccessPattern* p1, AccessPattern* p2){
 	int i;
 	for(i = 0; i < p1->k ; i++){
-		if(p1->patternType != p2->patternType || p1->strideSize[i] != p2->strideSize[i] ||p1->mpiRank != p2->mpiRank || p1->k != p2->k)
+		if(p1->patternType != p2->patternType || p1->strideSize[i] != p2->strideSize[i] ||p1->mpiRank != p2->mpiRank
+				|| p1->k != p2->k)
 			return 0;
 
 	}
@@ -708,15 +816,16 @@ int merge_kd(AccessPattern** kdpattern_head, int k){
 	return mergecnt;
 }
 
-int trace_analyzer(TraceList** list, TraceList* tmp, AccessPattern** access_pattern, int* count, int mpirank){
-	if(tmp != NULL && !trace_feed(list, tmp, access_pattern, mpirank))
+int trace_analyzer(TraceList** list, TraceList* tmp, AccessPattern** access_pattern, int* count, int mpirank
+		,UT_lookup **lookup){
+	if(tmp != NULL && !trace_lookup(list, tmp, lookup, mpirank))
 		(*count)++;
 
 	if(*count > LIST_SIZE_THRESHOLD || tmp == NULL){
 		int decreasecount;
 		// perform analysis: call all patterns
-		decreasecount = pattern_contig(list, access_pattern, mpirank);
-		decreasecount = pattern_fixed_stride(list, access_pattern, mpirank);
+		decreasecount = pattern_contig(list, access_pattern, mpirank, lookup);
+		decreasecount = pattern_fixed_stride(list, access_pattern, mpirank, lookup);
 		decreasecount = pattern_repeat(list, access_pattern, mpirank);
 
 		*count = *count - decreasecount;

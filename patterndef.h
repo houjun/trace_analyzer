@@ -4,6 +4,7 @@
  *  Created on: Apr 16, 2013
  *      Author: Houjun
  */
+#include "uthash.h"
 #ifndef PATTERNDEF_H
 #define PATTERNDEF_H
 
@@ -96,14 +97,30 @@ typedef struct tracelist {
     struct tracelist *next;
 } TraceList;
 
+// currently only use operation, rank, offset as key
+// request size not used because of sequential pattern
+typedef struct lookup_key{
+	char op;
+	int mpirank;
+	int off;
+} Lookup_key;
+
+typedef struct {
+	Lookup_key key;
+	AccessPattern *pattern;
+    UT_hash_handle hh;
+}UT_lookup;
+
+
 // read from RADAR trace file
-int read_radar(char* filename, TraceList** write_list, TraceList** read_list, AccessPattern** access_pattern, int* totalbytes);
+int read_radar(char* filename, TraceList** write_list, TraceList** read_list, AccessPattern** access_pattern
+		, int* totalbytes, UT_lookup **lookup);
 
 // detect contiguous pattern from same process
-int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpirank);
+int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup);
 
 // detect 1-D strided pattern from same process
-int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank);
+int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup);
 
 // detect markov pattern from same process, not used for now
 int pattern_markov(TraceList** tracelist, AccessPattern** pattern_head, int mpirank);
@@ -121,7 +138,8 @@ int repeat_check(TraceList* trace, AccessPattern* pattern);
 int trace_feed(TraceList** tracelist, TraceList* new_record, AccessPattern** pattern_head, int mpirank);
 
 // decide when to perform pattern detection algorithm to insert found pattern to known pattern list
-int trace_analyzer(TraceList** list, TraceList* tmp, AccessPattern** access_pattern, int* count, int mpirank);
+int trace_analyzer(TraceList** list, TraceList* tmp, AccessPattern** access_pattern, int* count, int mpirank
+		, UT_lookup **lookup);
 
 // check if two pattern are same for patternType, strideSize, mpiRank and k value
 int check_pattern_same(AccessPattern* p1, AccessPattern* p2);
