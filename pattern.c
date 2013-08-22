@@ -34,7 +34,6 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 	double timedelta = 0.0;
 	int read_count = 0;
 	int write_count = 0;
-	int opStep = 0;
 	int hierarchy_info;
 
 
@@ -65,7 +64,7 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 
 						//add trace record
 						if(strstr(operator,"Read") != NULL){
-							TraceList *tmp = addtmp(filepos, size, T_ADIO_READ, opStep++, timedelta, mpirank);
+							TraceList *tmp = addtmp(filepos, size, T_ADIO_READ,  timedelta, mpirank);
 							if(tmp==NULL)
 								return -1;
 							trace_analyzer(read_list, tmp, access_pattern, &read_count, mpirank, lookup);
@@ -73,7 +72,7 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 						}
 						else if(strstr(operator,"Write") != NULL){
 
-							TraceList *tmp = addtmp(filepos, size, T_ADIO_WRITE, opStep++, timedelta, mpirank);
+							TraceList *tmp = addtmp(filepos, size, T_ADIO_WRITE, timedelta, mpirank);
 							if(tmp==NULL)
 								return -1;
 							trace_analyzer(write_list, tmp, access_pattern, &write_count, mpirank, lookup);
@@ -119,7 +118,7 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 	return 0;
 }
 
-TraceList* addtmp(int filepos, int size, int op, int opStep, double opTime, int mpirank){
+TraceList* addtmp(int filepos, int size, int op, double opTime, int mpirank){
 
 	TraceList *tmp ;
 	if ( (tmp = (TraceList*)malloc(sizeof(TraceList))) == NULL)
@@ -128,7 +127,6 @@ TraceList* addtmp(int filepos, int size, int op, int opStep, double opTime, int 
 	tmp->offset = filepos;
 	tmp->size = size;
 	tmp->op = op;
-	tmp->opStep = opStep;
 	tmp->opTime = opTime;
 	tmp->next = NULL;
 	tmp->prev = NULL;
@@ -176,7 +174,6 @@ int pattern_repeat(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 		while(list_j != NULL){
 			if(list_j->offset == list_i->offset && list_j->size == list_i->size){
 				//found one repeat continue to search for more
-				tmpendtime = list_j->opStep;
 				list_k = list_j->next;
 				while(list_k != NULL){
 					if(list_k->offset == list_i->offset && list_k->size == list_i->size){
@@ -198,9 +195,7 @@ int pattern_repeat(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 						repeat_pattern->operation = list_i->op;
 						repeat_pattern->patternType = REPEAT;
 						repeat_pattern->strideSize[0] = 0;
-						repeat_pattern->startStep = list_i->opStep;
 						repeat_pattern->recordNum[0] = 1;
-						repeat_pattern->endStep = tmpendtime;
 						repeat_pattern->mpiRank = mpirank;
 						repeat_pattern->startTime = list_i->opTime;
 
@@ -266,7 +261,6 @@ int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 
 		while(list_j != NULL){
 			if(list_j->offset == tmppos + tmpsize){
-				tmpendtime = list_j->opStep;
 				contig_size ++;
 				tmppos = tmppos + tmpsize;
 				if(list_j->size != tmpsize)
@@ -295,8 +289,6 @@ int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 				contig_pattern->operation = list_i->op;
 				contig_pattern->strideSize[0] = 0;
 				contig_pattern->recordNum[0] = 1;
-				contig_pattern->startStep = list_i->opStep;
-				contig_pattern->endStep = tmpendtime;
 				contig_pattern->mpiRank = mpirank;
 				contig_pattern->startTime = list_i->opTime;
 				contig_pattern->reqOffesets[req_arr_size++] = list_i->size;
@@ -356,7 +348,6 @@ int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, in
 	TraceList* list_i = *tracelist;
 	TraceList* list_j = NULL;
 	TraceList* list_k = NULL;
-	int tmpendStep = 0;
 
 	while(list_i != NULL && list_i->next != NULL){
 
@@ -372,7 +363,6 @@ int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, in
 			}
 			tmppos = list_j->offset;
 			tmp_stride_size = list_j->offset - list_i->offset;
-			tmpendStep = list_j->opStep;
 			// stride size should be greater than 0
 			if(tmp_stride_size <= 0)
 				break;
@@ -408,9 +398,7 @@ int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, in
 				stride_pattern->operation = list_i->op;
 				stride_pattern->patternType = KD_STRIDED;
 				stride_pattern->strideSize[0] = tmp_stride_size;
-				stride_pattern->startStep = list_i->opStep;
 				stride_pattern->recordNum[0] = 1;
-				stride_pattern->endStep = tmpendStep;
 				stride_pattern->mpiRank = mpirank;
 				stride_pattern->startTime = list_i->opTime;
 

@@ -29,8 +29,6 @@ typedef struct pattern {
     int startPos;
     int endPos;
     int reqSize;
-    int startStep;
-    int endStep;
     int strideSize[PATTERN_K_SIZE_MAX];
     int recordNum[PATTERN_K_SIZE_MAX];	// # of records
     double startTime;
@@ -45,7 +43,6 @@ typedef struct tracelist {
     int mpirank;
     int offset;
     int size;
-    int opStep;
     double opTime;
     struct tracelist *prev;
     struct tracelist *next;
@@ -99,6 +96,6 @@ int check_pattern_same(AccessPattern* p1, AccessPattern* p2);
 int merge_kd(AccessPattern** kdpattern_head, int k);
 
 // allocate and add a trace to tracelist(a double linked list)
-TraceList* addtmp(int filepos, int size, int op, int opStep, double opTime, int mpirank);
+TraceList* addtmp(int filepos, int size, int op, double opTime, int mpirank);
 
 #endif
