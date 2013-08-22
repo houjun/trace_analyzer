@@ -17,34 +17,6 @@
 #define PATTERN_SIZE_THRESHOLD 3
 #define PATTERN_K_SIZE_MAX 10
 #define MAX_LINE_LENGTH 256
-
-/*******************************************
- * Supported trace operations (from trace.h)
- *******************************************/
-#define T_ADIO_OPEN           1
-#define T_ADIO_OPENCOLL       2
-#define T_ADIO_CLOSE          3
-
-#define T_ADIO_READCONTIG     4
-#define T_ADIO_READSTRIDED    5
-#define T_ADIO_READCOLL       6
-#define T_ADIO_WRITECONTIG    7
-#define T_ADIO_WRITESTRIDED   8
-#define T_ADIO_WRITECOLL      9
-
-#define T_ADIO_IREADCONTIG   10
-#define T_ADIO_IWRITECONTIG  11
-#define T_ADIO_IREADSTRIDED  12
-#define T_ADIO_IWRITESTRIDED 13
-
-#define T_ADIO_FCNTL         14
-#define T_ADIO_FEATURE       15
-#define T_ADIO_FLUSH         16
-#define T_ADIO_RESIZE        17
-#define T_ADIO_SEEKIND       18
-#define T_ADIO_SETINFO       19
-//above 19 are unused
-
 #define T_ADIO_READ 1
 #define T_ADIO_WRITE 2
 
@@ -56,9 +28,9 @@ typedef struct pattern {
     int mpiRank;
     int startPos;
     int endPos;
+    int reqSize;
     int startStep;
     int endStep;
-    int reqSize;
     int strideSize[PATTERN_K_SIZE_MAX];
     int recordNum[PATTERN_K_SIZE_MAX];	// # of records
     double startTime;
@@ -67,24 +39,6 @@ typedef struct pattern {
     struct pattern *next;
 } AccessPattern;
 
-typedef struct markovpattern {
-    //char filepath[128];
-    char operation;
-    char patternType;
-    int k;
-    int mpiRank;
-    int startPos[PATTERN_K_SIZE_MAX];
-    int endPos[PATTERN_K_SIZE_MAX];
-    int reqSize[PATTERN_K_SIZE_MAX];
-    int strideSize[PATTERN_K_SIZE_MAX];
-    int recordNum[PATTERN_K_SIZE_MAX];
-    int startStep;
-    int endStep;
-    double startTime;
-    struct markovpattern *prev;
-    struct markovpattern *next;
-} Markovpattern;
-//Markov pattern not used for now
 
 typedef struct tracelist {
     char op;
@@ -122,9 +76,6 @@ int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 // detect 1-D strided pattern from same process
 int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup);
 
-// detect markov pattern from same process, not used for now
-int pattern_markov(TraceList** tracelist, AccessPattern** pattern_head, int mpirank);
-
 // check if one trace record could be fitted into a known contiguous pattern
 int contig_check(TraceList* trace, AccessPattern* pattern);
 
@@ -143,9 +94,6 @@ int trace_analyzer(TraceList** list, TraceList* tmp, AccessPattern** access_patt
 
 // check if two pattern are same for patternType, strideSize, mpiRank and k value
 int check_pattern_same(AccessPattern* p1, AccessPattern* p2);
-
-// merge markov pattern to compact format
-int merge_markov(AccessPattern** pattern_head, Markovpattern** kdstride_head);
 
 // merge all (k-1)-D strided patterns to k-D pattern with given k
 int merge_kd(AccessPattern** kdpattern_head, int k);

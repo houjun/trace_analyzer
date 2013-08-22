@@ -50,18 +50,9 @@ int main(int argc, char *argv[]) {
 	}
 
 
-//	//merge Markov patterns
-//	Markovpattern *markov_head=NULL;
-//	merge_markov(&pattern_head, &markov_head);
-//	Markovpattern *list_m;
-
-
 	// calculate and output total pattern number
 	DL_FOREACH(pattern_head, list_i)
 		totalpatterncnt++;
-
-//	DL_FOREACH(markov_head, list_m)
-//		totalpatterncnt++;
 
 	FILE *fp = NULL;
 	if( (fp = fopen(argv[2], "w+")) == NULL) {
@@ -121,22 +112,6 @@ int main(int argc, char *argv[]) {
 	}
 
 
-
-/*
-	DL_FOREACH(markov_head, list_m){
-		fprintf(fp,"%s  %12s\t%8d %12lf   %d\t",oname[list_m->operation - 1],"MARKOV", list_m->mpiRank, list_m->startTime,list_m->k);
-
-		for(i=0; i<list_m->k;i++){
-			fprintf(fp,"(%d, %d, %d, %d, %d)",list_m->startPos[i], list_m->endPos[i],list_m->reqSize[i],list_m->recordNum[i],list_m->strideSize[i]);
-		}
-		fprintf(fp,"\n");
-	}
-	Markovpattern *melt;
-	Markovpattern *mtmp;
-	DL_FOREACH_SAFE(markov_head,melt,mtmp) {
-		  DL_DELETE(markov_head,melt);
-	}
-*/
 	fclose(fp);
 
 	return EXIT_SUCCESS;
