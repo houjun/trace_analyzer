@@ -9,16 +9,16 @@
 #define PATTERNDEF_H
 
 #define CONTIGUOUS 1
-#define REPEAT 2
+#define SEQUENTIAL 2
 #define KD_STRIDED 3
-#define SEQUENTIAL 4
+
+#define T_ADIO_READ 1
+#define T_ADIO_WRITE 2
 
 #define LIST_SIZE_THRESHOLD 3
 #define PATTERN_SIZE_THRESHOLD 3
 #define PATTERN_K_SIZE_MAX 10
 #define MAX_LINE_LENGTH 256
-#define T_ADIO_READ 1
-#define T_ADIO_WRITE 2
 
 typedef struct pattern {
     //char filepath[128];
@@ -30,7 +30,7 @@ typedef struct pattern {
     int endPos;
     int reqSize;
     int strideSize[PATTERN_K_SIZE_MAX];
-    int recordNum[PATTERN_K_SIZE_MAX];	// # of records
+    int recordNum[PATTERN_K_SIZE_MAX];
     double startTime;
     int reqOffesets[1024];
     struct pattern *prev;
@@ -78,9 +78,6 @@ int contig_check(TraceList* trace, AccessPattern* pattern);
 
 // check if one trace record could be fitted into a known 1-D strided pattern
 int stride_check(TraceList* trace, AccessPattern* pattern);
-
-// check if one trace record could be fitted into a known repeat pattern
-int repeat_check(TraceList* trace, AccessPattern* pattern);
 
 // feed one trace record to each of the known patterns
 int trace_feed(TraceList** tracelist, TraceList* new_record, AccessPattern** pattern_head, int mpirank);

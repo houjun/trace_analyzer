@@ -1,5 +1,5 @@
 all:
-	gcc main.c pattern.c -o analyzer
+	make main.c pattern.c -o analyzer -g
 
 clean:
-	rm -f analyzer
+	rm -f *.o analyzer
