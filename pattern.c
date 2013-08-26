@@ -30,10 +30,14 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 	char operator[MAX_LINE_LENGTH];
 	char filepath[MAX_LINE_LENGTH];
 	char processtmp[MAX_LINE_LENGTH];
+	char tmp_op;
 	double timedelta = 0.0;
 	int read_count = 0;
 	int write_count = 0;
 	int hierarchy_info;
+	int strided_start_pos = 0;
+	int strided_end_pos = 0;
+	int strided_stride = 0;
 
 
 	while(fgets(buf, MAX_LINE_LENGTH, fp)){
@@ -56,6 +60,55 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 					fgets(buf, MAX_LINE_LENGTH, fp);
 					//<Op string> <Time delta> <m: # of accesses>
 					sscanf(buf, "%d %s %lf %d",&hierarchy_info, operator, &timedelta, &mpairs);
+
+					if(strstr(operator,"Read") != NULL){
+						tmp_op = T_ADIO_READ;
+
+					}
+					else if(strstr(operator,"Write") != NULL){
+						tmp_op = T_ADIO_WRITE;
+
+					}
+
+					if(strstr(operator,"Strided") != NULL && mpairs > 2){
+						// known to be strided accesses
+						fgets(buf, MAX_LINE_LENGTH, fp);
+						sscanf(buf, "%d, %d", &filepos, &size);
+						strided_start_pos = filepos;
+
+						fgets(buf, MAX_LINE_LENGTH, fp);
+						sscanf(buf, "%d, %d", &filepos, &size);
+						strided_stride = filepos - strided_start_pos;
+
+						for(j=2; j < mpairs - 1; j++){
+							fgets(buf, MAX_LINE_LENGTH, fp);
+						}
+
+						fgets(buf, MAX_LINE_LENGTH, fp);
+						sscanf(buf, "%d, %d", &filepos, &size);
+						strided_end_pos = filepos;
+
+						// add new pattern
+						AccessPattern *stride_pattern ;
+						if ( (stride_pattern = (AccessPattern*)malloc(sizeof(AccessPattern)) ) == NULL){
+							printf("Failed to allocate space for Access Pattern!");
+							return -1;
+						}
+
+						stride_pattern->k = 1;
+						stride_pattern->reqSize = size;
+						stride_pattern->startPos = strided_start_pos;
+						stride_pattern->endPos = strided_end_pos;
+						stride_pattern->operation = tmp_op;
+						stride_pattern->patternType = KD_STRIDED;
+						stride_pattern->strideSize[0] = strided_stride;
+						stride_pattern->recordNum[0] = mpairs;
+						stride_pattern->mpiRank = mpirank;
+						stride_pattern->startTime = timedelta;
+
+						DL_APPEND(*access_pattern, stride_pattern);
+					}
+
 					for(j=0; j < mpairs; j++){
 						fgets(buf, MAX_LINE_LENGTH, fp);
 						sscanf(buf, "%d, %d", &filepos, &size);
