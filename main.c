@@ -22,7 +22,7 @@ int qsort_compare (const void *a, const void *b) {
 int main(int argc, char *argv[]) {
 
 	char pname[10][20] = {"CONTIGUOUS","REPEAT","KD_STRIDED","SEQUENTIAL"};
-	char oname[2][32] = {"ADIO_READ","ADIO_WRITE"};	
+	char oname[4][32] = {"ADIO_READ","ADIO_WRITE","ADIO_READSTRIDED","ADIO_WRITESTRIDED"};
 	int totalbytes = 0;
 	int totalpatterncnt = 0;
 	int i = 0;
@@ -87,6 +87,7 @@ int main(int argc, char *argv[]) {
 										0, list_i->recordNum[0] ,list_i->strideSize[0]);
 			fprintf(fp," \t (%f, %f, %f, %f, %f) \n",five_num_summary[0],five_num_summary[1],five_num_summary[2],five_num_summary[3],five_num_summary[4]);
 		}
+		// for strided
 		else if(list_i->k < 2){
 			fprintf(fp,"%s  %12s %8d %12lf   1 %8d %8d %8d %8d %8d\n"
 							,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime, list_i->startPos, list_i->endPos,

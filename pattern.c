@@ -34,6 +34,8 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 	int read_count = 0;
 	int write_count = 0;
 	int hierarchy_info;
+	TraceList *tmp = NULL;
+	char tmp_op;
 
 
 	while(fgets(buf, MAX_LINE_LENGTH, fp)){
@@ -56,21 +58,30 @@ int read_radar(char* filename, TraceList** write_list, TraceList** read_list, Ac
 					fgets(buf, MAX_LINE_LENGTH, fp);
 					//<Op string> <Time delta> <m: # of accesses>
 					sscanf(buf, "%d %s %lf %d",&hierarchy_info, operator, &timedelta, &mpairs);
+
 					for(j=0; j < mpairs; j++){
 						fgets(buf, MAX_LINE_LENGTH, fp);
 						sscanf(buf, "%d, %d", &filepos, &size);
 
 						//add trace record
 						if(strstr(operator,"Read") != NULL){
-							TraceList *tmp = addtmp(filepos, size, T_ADIO_READ,  timedelta, mpirank);
+							if(strstr(operator,"Strided") != NULL)
+								tmp_op = T_ADIO_READSTRIDED;
+							else
+								tmp_op = T_ADIO_READ;
+
+							tmp = addtmp(filepos, size, tmp_op,  timedelta, mpirank);
 							if(tmp==NULL)
 								return -1;
 							trace_analyzer(read_list, tmp, access_pattern, &read_count, mpirank, lookup);
 							//just like below
 						}
 						else if(strstr(operator,"Write") != NULL){
-
-							TraceList *tmp = addtmp(filepos, size, T_ADIO_WRITE, timedelta, mpirank);
+							if(strstr(operator,"Strided") != NULL)
+								tmp_op = T_ADIO_WRITESTRIDED;
+							else
+								tmp_op = T_ADIO_WRITE;
+							TraceList *tmp = addtmp(filepos, size, tmp_op, timedelta, mpirank);
 							if(tmp==NULL)
 								return -1;
 							trace_analyzer(write_list, tmp, access_pattern, &write_count, mpirank, lookup);
