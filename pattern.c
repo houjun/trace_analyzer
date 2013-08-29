@@ -30,10 +30,13 @@ int read_radar(char *filename, TraceList **write_list, TraceList **read_list, Ac
 	char operator[MAX_LINE_LENGTH];
 	char filepath[MAX_LINE_LENGTH];
 	char processtmp[MAX_LINE_LENGTH];
-	double timedelta = 0.0;
+	double start_timedelta = 0.0;
+	double end_timedelta = 0.0;
 	int read_count = 0;
 	int write_count = 0;
 	int hierarchy_info;
+	TraceList *tmp = NULL;
+	char tmp_op;
 
 
 	while(fgets(buf, MAX_LINE_LENGTH, fp)){
@@ -55,22 +58,31 @@ int read_radar(char *filename, TraceList **write_list, TraceList **read_list, Ac
 					//read next n records
 					fgets(buf, MAX_LINE_LENGTH, fp);
 					//<Op string> <Time delta> <m: # of accesses>
-					sscanf(buf, "%d %s %lf %d",&hierarchy_info, operator, &timedelta, &mpairs);
+					sscanf(buf, "%d %s %lf %lf %d",&hierarchy_info, operator, &start_timedelta, &end_timedelta, &mpairs);
+
 					for(j=0; j < mpairs; j++){
 						fgets(buf, MAX_LINE_LENGTH, fp);
 						sscanf(buf, "%d, %d", &filepos, &size);
 
 						//add trace record
 						if(strstr(operator,"Read") != NULL){
-							TraceList *tmp = addtmp(filepos, size, T_ADIO_READ,  timedelta, mpirank);
+							if(strstr(operator,"Strided") != NULL)
+								tmp_op = T_ADIO_READSTRIDED;
+							else
+								tmp_op = T_ADIO_READ;
+
+							tmp = addtmp(filepos, size, tmp_op, start_timedelta, end_timedelta, mpirank);
 							if(tmp==NULL)
 								return -1;
 							trace_analysis(read_list, tmp, access_pattern, &read_count, mpirank, lookup);
 							//just like below
 						}
 						else if(strstr(operator,"Write") != NULL){
-
-							TraceList *tmp = addtmp(filepos, size, T_ADIO_WRITE, timedelta, mpirank);
+							if(strstr(operator,"Strided") != NULL)
+								tmp_op = T_ADIO_WRITESTRIDED;
+							else
+								tmp_op = T_ADIO_WRITE;
+							TraceList *tmp = addtmp(filepos, size, tmp_op, start_timedelta, end_timedelta, mpirank);
 							if(tmp==NULL)
 								return -1;
 							trace_analysis(write_list, tmp, access_pattern, &write_count, mpirank, lookup);
@@ -131,7 +143,8 @@ int trace_analysis(TraceList **list, TraceList *tmp, AccessPattern **access_patt
 	return 0;
 }
 
-TraceList *addtmp(int filepos, int size, int op, double opTime, int mpirank){
+
+TraceList* addtmp(int filepos, int size, int op, double startTime, double endTime, int mpirank){
 
 	TraceList *tmp ;
 	if ( (tmp = (TraceList*)malloc(sizeof(TraceList))) == NULL)
@@ -140,7 +153,8 @@ TraceList *addtmp(int filepos, int size, int op, double opTime, int mpirank){
 	tmp->offset = filepos;
 	tmp->size = size;
 	tmp->op = op;
-	tmp->opTime = opTime;
+	tmp->startTime = startTime;
+	tmp->endTime = endTime;
 	tmp->next = NULL;
 	tmp->prev = NULL;
 	return tmp;
@@ -212,7 +226,8 @@ int pattern_contig(TraceList **tracelist, AccessPattern **pattern_head, int mpir
 				contig_pattern->strideSize[0] = 0;
 				contig_pattern->recordNum[0] = 1;
 				contig_pattern->mpiRank = mpirank;
-				contig_pattern->startTime = list_i->opTime;
+				contig_pattern->startTime = list_i->startTime;
+				contig_pattern->endTime = list_i->endTime;
 				contig_pattern->reqOffesets[req_arr_size++] = list_i->size;
 
 				DL_APPEND(*pattern_head, contig_pattern);
@@ -320,7 +335,8 @@ int pattern_fixed_stride(TraceList **tracelist, AccessPattern **pattern_head, in
 				stride_pattern->strideSize[0] = tmp_stride_size;
 				stride_pattern->recordNum[0] = 1;
 				stride_pattern->mpiRank = mpirank;
-				stride_pattern->startTime = list_i->opTime;
+				stride_pattern->startTime = list_i->startTime;
+				stride_pattern->endTime = list_i->endTime;
 
 				DL_APPEND(*pattern_head, stride_pattern);
 
@@ -474,7 +490,6 @@ int trace_feed(TraceList **tracelist, TraceList *new_record, AccessPattern **pat
 
 	return findpattern;
 }
-
 
 int check_pattern_same(AccessPattern *p1, AccessPattern *p2){
 	int i;
