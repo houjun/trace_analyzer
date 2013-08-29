@@ -50,7 +50,7 @@ typedef struct tracelist {
 
 // currently only use operation, rank, offset as key
 // request size not used because of sequential pattern
-typedef struct lookup_key{
+typedef struct lookup_key {
 	char op;
 	int mpirank;
 	int off;
@@ -60,8 +60,19 @@ typedef struct {
 	Lookup_key key;
 	AccessPattern *pattern;
     UT_hash_handle hh;
-}UT_lookup;
+} UT_lookup;
 
+typedef struct blocknode {
+	unsigned int blocknum;		// key ~up to 4TB file or more if size is flexible
+	uint16_t size;				// char?
+	uint16_t weight;			// alignment? or use first few bits for size use & to mask
+} BlockNode;
+
+typedef struct {
+	unsigned int blocknum;
+	struct blocknode *next;
+    UT_hash_handle hh;
+} Block_Hash;
 
 // read from RADAR trace file
 int read_radar(char* filename, TraceList** write_list, TraceList** read_list, AccessPattern** access_pattern
@@ -83,7 +94,7 @@ int stride_check(TraceList* trace, AccessPattern* pattern);
 int trace_feed(TraceList** tracelist, TraceList* new_record, AccessPattern** pattern_head, int mpirank);
 
 // decide when to perform pattern detection algorithm to insert found pattern to known pattern list
-int trace_analyzer(TraceList** list, TraceList* tmp, AccessPattern** access_pattern, int* count, int mpirank
+int trace_analysis(TraceList** list, TraceList* tmp, AccessPattern** access_pattern, int* count, int mpirank
 		, UT_lookup **lookup);
 
 // check if two pattern are same for patternType, strideSize, mpiRank and k value
