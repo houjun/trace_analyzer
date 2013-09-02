@@ -18,8 +18,6 @@
 #define T_ADIO_WRITESTRIDED 3
 
 #define SEQ_LIST_THRESHOLD 3
-#define NON_LIST_THRESHOLD 16
-#define NON_LIST_SIZE NON_LIST_THRESHOLD * 10
 #define PATTERN_SIZE_THRESHOLD 3
 #define PATTERN_K_SIZE_MAX 10
 #define MAX_LINE_LENGTH 256
@@ -69,15 +67,14 @@ typedef struct ut_lookup{
 
 
 typedef struct blocknode {
-	int blocknum;		// key ~up to 4TB file or more if size is flexible
+	int blocknum;		// key ~up to 2TB file with blksize 512B or more if size is flexible
 	int weight;			// alignment? or use first few bits for size use & to mask
-	int nextnum[64];
-	int nextcnt[64];
+    UT_hash_handle hh;
 } BlockNode;
 
 
 typedef struct freq_block{
-	int blocknum;
+	int freq_blocknum;
 	BlockNode *next;
     UT_hash_handle hh;
 } Block_Hash;
@@ -91,6 +88,9 @@ int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 
 // detect 1-D strided pattern from same process
 int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup);
+
+// detect frequent access pattern
+int freq_analysis(int totalcnt);
 
 // lookup in hash table
 int trace_lookup(TraceList **tracelist, TraceList *new_record, UT_lookup **lookup, int mpirank);

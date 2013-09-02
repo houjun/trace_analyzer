@@ -18,9 +18,12 @@ int block_size;
 int candidate_freq;
 int result_freq;
 int lookahead_window;
-int count_nonseq[NON_LIST_SIZE];
-int block_index[NON_LIST_SIZE];
-int block_num[NON_LIST_SIZE];
+int freq_list_size;
+int *count_nonseq;
+int *block_index;
+int block_index_size;
+int *block_num;
+int block_num_size;
 Block_Hash *candidate;
 Block_Hash *result;
 
@@ -32,7 +35,15 @@ int main(int argc, char *argv[]) {
 
 	candidate_freq = 2;
 	result_freq = 3;
+	freq_list_size = 16;
 	lookahead_window = 32;
+
+	block_num = malloc(sizeof(int) * freq_list_size * 4);
+	block_num_size = freq_list_size * 4;
+
+	block_index_size = block_num_size;
+	block_index = malloc(sizeof(int) * block_index_size);
+	count_nonseq = malloc(sizeof(int) * block_index_size);
 
 	// store all traces
 	TraceList *adio_write_list_head = NULL;
@@ -130,6 +141,33 @@ int main(int argc, char *argv[]) {
 		  DL_DELETE(pattern_head, elt);
 	}
 
+	UT_lookup *current, *tmp;
+    HASH_ITER(hh, lookup, current, tmp) {
+	    HASH_DEL(lookup,current);
+	    free(current);
+	}
+
+    Block_Hash *blk_current, *blk_tmp;
+    BlockNode *node_current, *node_tmp;
+    HASH_ITER(hh, candidate, blk_current, blk_tmp) {
+        HASH_ITER(hh, blk_current->next, node_current, node_tmp) {
+    	    HASH_DEL(blk_current->next,node_current);
+    	    free(node_current);
+        }
+	    HASH_DEL(candidate,blk_current);
+	    free(blk_current);
+	}
+    HASH_ITER(hh, result, blk_current, blk_tmp) {
+        HASH_ITER(hh, blk_current->next, node_current, node_tmp) {
+    	    HASH_DEL(blk_current->next,node_current);
+    	    free(node_current);
+        }
+	    HASH_DEL(result,blk_current);
+	    free(blk_current);
+	}
+	free(count_nonseq);
+	free(block_index);
+	free(block_num);
 
 	fclose(fp);
 

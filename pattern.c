@@ -16,9 +16,12 @@ extern int block_size;
 extern int candidate_freq;
 extern int result_freq;
 extern int lookahead_window;
-extern int count_nonseq[NON_LIST_SIZE];
-extern int block_index[NON_LIST_SIZE];
-extern int block_num[NON_LIST_SIZE];
+extern int freq_list_size;
+extern int *count_nonseq;
+extern int *block_index;
+extern int block_index_size;
+extern int *block_num;
+extern int block_num_size;
 extern Block_Hash *candidate;
 extern Block_Hash *result;
 
@@ -152,7 +155,7 @@ int trace_analysis(TraceList **list, TraceList *tmp, AccessPattern **access_patt
 	}
 
 	// non sequential analysis
-	if(*count > NON_LIST_THRESHOLD || tmp == NULL){
+	if(*count > freq_list_size || tmp == NULL){
 
 		// map to block
 		int cnt = offset_to_block(list);
@@ -171,7 +174,10 @@ int compareBlockNum(const void * a, const void * b)
 
 int offset_to_block(TraceList **tracelist)
 {
-	TraceList *list_i = *tracelist;
+	// block_index stores all unique block numbers
+	// count_nonseq stores corresponding counts
+
+	TraceList *list_i = *tracelist, *old;
 	int i = 0, j = 0, totalcnt;
 
 	while(list_i != NULL){
@@ -182,22 +188,32 @@ int offset_to_block(TraceList **tracelist)
 		}
 
 		for(j = 0; j < list_i->size / block_size; j++){
+			if(i >= block_num_size)
+			block_num = realloc(block_num, sizeof(int) * block_num_size * 2);
 			block_num[i++] = list_i->offset / block_size;
 		}
+		old = list_i;
 		list_i = list_i->next;
+		DL_DELETE(*tracelist, old);
+
 	}
 
 	totalcnt = i;
 	qsort(block_num, totalcnt, sizeof(int), compareBlockNum);
 
-	j = 0;
+	j = 1;
 	block_index[0] = block_num[0];
 	for(i = 1; i < totalcnt; i++){
+		if(j >= block_index_size){
+			count_nonseq = realloc(count_nonseq, sizeof(int) * block_index_size * (totalcnt / i));
+			block_index = realloc(block_index, sizeof(int) * block_index_size * (totalcnt / i));
+		}
+
 		if(block_num[i] == block_num[i - 1]){
 			count_nonseq[j]++;
 		}
 		else{
-			block_index[++j] = block_num[i];
+			block_index[j++] = block_num[i];
 		}
 
 	}
@@ -207,55 +223,61 @@ int offset_to_block(TraceList **tracelist)
 
 int freq_analysis(int totalcnt)
 {
-	int i, j, k;
+	int i, j;
 
 	for(i = 0; i < totalcnt; i++){
-		// first check if current exists in result or candidate hash table
+		// first check if current(block_index[i]) exists in result or candidate hash table
 		// if so update, else insert
 
-		Block_Hash *tmp_candidate, *tmp_result;
+		Block_Hash *tmp_candidate = NULL, *tmp_result = NULL;
+		Block_Hash *tmp_switch = NULL;
+		BlockNode *tmp_blk = NULL;
+
 		HASH_FIND_INT(candidate, &block_index[i], tmp_candidate);
 		HASH_FIND_INT(result, &block_index[i], tmp_result);
 
-		// build a prefix tree for each freq block?
-
-		if(tmp_candidate != NULL){
-
-			//tmp_candidate->next
-		}
-		else if(tmp_result != NULL){
-
+		if(tmp_candidate != NULL || tmp_result != NULL){
+			if(tmp_result != NULL)
+				tmp_switch = tmp_result;
+			else
+				tmp_switch = tmp_candidate;
 		}
 		else if(count_nonseq[i] > candidate_freq){
 			// add at least to candidate set
+			if(count_nonseq[i] > result_freq)
+				tmp_switch = tmp_result;
+			else
+				tmp_switch = tmp_candidate;
 
 			Block_Hash *s = malloc(sizeof(Block_Hash));
-			s->blocknum = block_index[i];
+			s->freq_blocknum = block_index[i];
+			s->next = NULL;
 
-			// next lookahead_window accesses, assume all of them is unique
-			BlockNode *tmp_blk;
-			k = i + 1;
-			// careful with boundary
-			for(j = 0; j < lookahead_window; j++){
-				tmp_blk = malloc(sizeof(BlockNode));
-				tmp_blk->blocknum = block_index[k++];
-				tmp_blk->weight = 1;
-			}
+			HASH_ADD_INT(tmp_switch, freq_blocknum, s );
 
-			if(count_nonseq[i] > result_freq){
-				// update or add to result set
-				HASH_ADD_INT(result, blocknum, s );
-			}
-			else{
-				// update or add to candidate set
-				HASH_ADD_INT(candidate, blocknum, s );
-			}
+		}
+		else{
+			continue;
+		}
+		// next lookahead_window accesses
+		// careful with boundary
+		for(j = i + 1; j < i + lookahead_window && j < freq_list_size; j++){
+			HASH_FIND_INT(tmp_switch->next, &block_index[j], tmp_blk);
 
+			if(tmp_blk != NULL){
+				// found previous one, just update
+				tmp_blk->weight++;
+				continue;
+			}
+			tmp_blk = malloc(sizeof(BlockNode));
+			tmp_blk->blocknum = block_index[j];
+			tmp_blk->weight = 1;
+
+			HASH_ADD_INT(tmp_switch->next, blocknum, tmp_blk);
 
 		}
 
-
-	}
+	}//for
 	return 0;
 }
 
