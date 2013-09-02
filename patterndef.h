@@ -17,7 +17,9 @@
 #define T_ADIO_READSTRIDED 3
 #define T_ADIO_WRITESTRIDED 3
 
-#define LIST_SIZE_THRESHOLD 3
+#define SEQ_LIST_THRESHOLD 3
+#define NON_LIST_THRESHOLD 16
+#define NON_LIST_SIZE NON_LIST_THRESHOLD * 10
 #define PATTERN_SIZE_THRESHOLD 3
 #define PATTERN_K_SIZE_MAX 10
 #define MAX_LINE_LENGTH 256
@@ -59,21 +61,24 @@ typedef struct lookup_key {
 	int off;
 } Lookup_key;
 
-typedef struct {
+typedef struct ut_lookup{
 	Lookup_key key;
 	AccessPattern *pattern;
     UT_hash_handle hh;
 } UT_lookup;
 
+
 typedef struct blocknode {
-	unsigned int blocknum;		// key ~up to 4TB file or more if size is flexible
-	uint16_t size;				// char?
-	uint16_t weight;			// alignment? or use first few bits for size use & to mask
+	int blocknum;		// key ~up to 4TB file or more if size is flexible
+	int weight;			// alignment? or use first few bits for size use & to mask
+	int nextnum[64];
+	int nextcnt[64];
 } BlockNode;
 
-typedef struct {
-	unsigned int blocknum;
-	struct blocknode *next;
+
+typedef struct freq_block{
+	int blocknum;
+	BlockNode *next;
     UT_hash_handle hh;
 } Block_Hash;
 
@@ -87,11 +92,17 @@ int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpir
 // detect 1-D strided pattern from same process
 int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup);
 
+// lookup in hash table
+int trace_lookup(TraceList **tracelist, TraceList *new_record, UT_lookup **lookup, int mpirank);
+
 // check if one trace record could be fitted into a known contiguous pattern
 int contig_check(TraceList* trace, AccessPattern* pattern);
 
 // check if one trace record could be fitted into a known 1-D strided pattern
 int stride_check(TraceList* trace, AccessPattern* pattern);
+
+// maps offset and lenth to block number, then sort
+int offset_to_block(TraceList **tracelist);
 
 // feed one trace record to each of the known patterns
 int trace_feed(TraceList** tracelist, TraceList* new_record, AccessPattern** pattern_head, int mpirank);

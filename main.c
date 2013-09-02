@@ -14,6 +14,15 @@
 #include "utlist.h"
 #include "uthash.h"
 
+int block_size;
+int candidate_freq;
+int result_freq;
+int lookahead_window;
+int count_nonseq[NON_LIST_SIZE];
+int block_index[NON_LIST_SIZE];
+int block_num[NON_LIST_SIZE];
+Block_Hash *candidate;
+Block_Hash *result;
 
 int qsort_compare (const void *a, const void *b) {
   return ( *(int*)a - *(int*)b );
@@ -21,11 +30,9 @@ int qsort_compare (const void *a, const void *b) {
 
 int main(int argc, char *argv[]) {
 
-	char pname[10][20] = {"CONTIGUOUS","REPEAT","KD_STRIDED","SEQUENTIAL"};
-	char oname[4][32] = {"ADIO_READ","ADIO_WRITE","ADIO_READS","ADIO_WRITES"};
-	int totalbytes = 0;
-	int totalpatterncnt = 0;
-	int i = 0;
+	candidate_freq = 2;
+	result_freq = 3;
+	lookahead_window = 32;
 
 	// store all traces
 	TraceList *adio_write_list_head = NULL;
@@ -34,11 +41,20 @@ int main(int argc, char *argv[]) {
 
 	// look up hash table
 	UT_lookup *lookup = NULL;
+	candidate = NULL;
+	result = NULL;
 
 	if(argc != 3){
 		printf("Usage: analyzer input_filename output_filename\n");
 		return -1;
 	}
+
+
+	char pname[10][20] = {"CONTIGUOUS","REPEAT","KD_STRIDED","SEQUENTIAL"};
+	char oname[4][32] = {"ADIO_READ","ADIO_WRITE","ADIO_READS","ADIO_WRITES"};
+	int totalbytes = 0;
+	int totalpatterncnt = 0;
+	int i = 0;
 
 	//read from file and perform analysis
 	read_radar(argv[1], &adio_write_list_head, &adio_read_list_head, &pattern_head, &totalbytes, &lookup);
@@ -63,7 +79,8 @@ int main(int argc, char *argv[]) {
 		printf("Error Reading File\n");
 
 	//output pattern list
-	fprintf(fp,"%d\n%d\nOP            Pattern \t   MPIRank  StartTime    EndTime    #      Start    End   AccessSize #records StrideSize\n", totalbytes, totalpatterncnt);
+	fprintf(fp,"%d\n%d\nOP            Pattern \t   MPIRank  StartTime    EndTime    #      Start    End   AccessSize #records StrideSize\n"
+			, totalbytes, totalpatterncnt);
 	DL_FOREACH(pattern_head, list_i){
 		if(list_i->patternType == SEQUENTIAL){
 			float five_num_summary[5];
@@ -83,20 +100,20 @@ int main(int argc, char *argv[]) {
 			}
 
 			fprintf(fp,"%10s  %12s %4d %12lf %12lf  1 %8d %8d %8d %8d %8d"
-										,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime, list_i->endTime
-										, list_i->startPos, list_i->endPos,	0, list_i->recordNum[0] ,list_i->strideSize[0]);
+										,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime
+										, list_i->endTime, list_i->startPos, list_i->endPos,	0, list_i->recordNum[0] ,list_i->strideSize[0]);
 			fprintf(fp," \t (%f, %f, %f, %f, %f) \n"
 					,five_num_summary[0],five_num_summary[1],five_num_summary[2],five_num_summary[3],five_num_summary[4]);
 		}
 		// for strided
 		else if(list_i->k < 2){
 			fprintf(fp,"%10s  %12s %4d %12lf %12lf  1 %8d %8d %8d %8d %8d\n"
-							,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime, list_i->endTime, list_i->startPos, list_i->endPos,
-							list_i->reqSize, list_i->recordNum[0] ,list_i->strideSize[0]);
+							,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime, list_i->endTime
+							, list_i->startPos, list_i->endPos, list_i->reqSize, list_i->recordNum[0] ,list_i->strideSize[0]);
 		}
 		else{
-			fprintf(fp,"%10s  %12s\t%4d %12lf %12lf   %d %8d %8d\t",oname[list_i->operation - 1],"KD_STRIDED", list_i->mpiRank, list_i->startTime, list_i->endTime, list_i->k
-							, list_i->startPos, list_i->endPos);
+			fprintf(fp,"%10s  %12s\t%4d %12lf %12lf   %d %8d %8d\t",oname[list_i->operation - 1],"KD_STRIDED", list_i->mpiRank, list_i->startTime
+					, list_i->endTime, list_i->k, list_i->startPos, list_i->endPos);
 
 			for(i=list_i->k-1; i >= 0;i--){
 				fprintf(fp,"(%d, %d, %d)",list_i->reqSize,list_i->recordNum[i],list_i->strideSize[i]);

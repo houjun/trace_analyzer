@@ -12,8 +12,18 @@
 #include "utlist.h"
 #include "uthash.h"
 
-int read_radar(char *filename, TraceList **write_list, TraceList **read_list, AccessPattern **access_pattern
-		, int *totalbytesrw, UT_lookup **lookup){
+extern int block_size;
+extern int candidate_freq;
+extern int result_freq;
+extern int lookahead_window;
+extern int count_nonseq[NON_LIST_SIZE];
+extern int block_index[NON_LIST_SIZE];
+extern int block_num[NON_LIST_SIZE];
+extern Block_Hash *candidate;
+extern Block_Hash *result;
+
+int read_radar(char *filename, TraceList **write_list, TraceList **read_list, AccessPattern **access_pattern, int *totalbytesrw, UT_lookup **lookup)
+{
 
 	char buf[MAX_LINE_LENGTH];
 	FILE *fp = NULL;
@@ -126,23 +136,141 @@ int read_radar(char *filename, TraceList **write_list, TraceList **read_list, Ac
 	return 0;
 }
 
-int trace_analysis(TraceList **list, TraceList *tmp, AccessPattern **access_pattern, int *count, int mpirank
-		,UT_lookup **lookup){
+int trace_analysis(TraceList **list, TraceList *tmp, AccessPattern **access_pattern, int *count, int mpirank, UT_lookup **lookup)
+{
+	int decreasecount;
+
 	if(tmp != NULL && !trace_lookup(list, tmp, lookup, mpirank))
 		(*count)++;
 
-	if(*count > LIST_SIZE_THRESHOLD || tmp == NULL){
-		int decreasecount;
-		// perform analysis: call all patterns
+	// perform sequential analysis
+	if(*count > SEQ_LIST_THRESHOLD || tmp == NULL){
 		decreasecount = pattern_contig(list, access_pattern, mpirank, lookup);
 		decreasecount = pattern_fixed_stride(list, access_pattern, mpirank, lookup);
 
 		*count = *count - decreasecount;
 	}
 
+	// non sequential analysis
+	if(*count > NON_LIST_THRESHOLD || tmp == NULL){
+
+		// map to block
+		int cnt = offset_to_block(list);
+		freq_analysis(cnt);
+
+		*count = 0;
+	}
+
 	return 0;
 }
 
+int compareBlockNum(const void * a, const void * b)
+{
+  return ( *(int*)a - *(int*)b );
+}
+
+int offset_to_block(TraceList **tracelist)
+{
+	TraceList *list_i = *tracelist;
+	int i = 0, j = 0, totalcnt;
+
+	while(list_i != NULL){
+		// skip write op
+		if(list_i->op % 2 == 0){
+			list_i = list_i->next;
+			continue;
+		}
+
+		for(j = 0; j < list_i->size / block_size; j++){
+			block_num[i++] = list_i->offset / block_size;
+		}
+		list_i = list_i->next;
+	}
+
+	totalcnt = i;
+	qsort(block_num, totalcnt, sizeof(int), compareBlockNum);
+
+	j = 0;
+	block_index[0] = block_num[0];
+	for(i = 1; i < totalcnt; i++){
+		if(block_num[i] == block_num[i - 1]){
+			count_nonseq[j]++;
+		}
+		else{
+			block_index[++j] = block_num[i];
+		}
+
+	}
+
+	return totalcnt;
+}
+
+int freq_analysis(int totalcnt)
+{
+	int i, j, k;
+
+	for(i = 0; i < totalcnt; i++){
+		// first check if current exists in result or candidate hash table
+		// if so update, else insert
+
+		Block_Hash *tmp_candidate, *tmp_result;
+		HASH_FIND_INT(candidate, &block_index[i], tmp_candidate);
+		HASH_FIND_INT(result, &block_index[i], tmp_result);
+
+		// build a prefix tree for each freq block?
+
+		if(tmp_candidate != NULL){
+
+			//tmp_candidate->next
+		}
+		else if(tmp_result != NULL){
+
+		}
+		else if(count_nonseq[i] > candidate_freq){
+			// add at least to candidate set
+
+			Block_Hash *s = malloc(sizeof(Block_Hash));
+			s->blocknum = block_index[i];
+
+			// next lookahead_window accesses, assume all of them is unique
+			BlockNode *tmp_blk;
+			k = i + 1;
+			// careful with boundary
+			for(j = 0; j < lookahead_window; j++){
+				tmp_blk = malloc(sizeof(BlockNode));
+				tmp_blk->blocknum = block_index[k++];
+				tmp_blk->weight = 1;
+			}
+
+			if(count_nonseq[i] > result_freq){
+				// update or add to result set
+				HASH_ADD_INT(result, blocknum, s );
+			}
+			else{
+				// update or add to candidate set
+				HASH_ADD_INT(candidate, blocknum, s );
+			}
+
+
+		}
+
+
+	}
+	return 0;
+}
+
+
+int pattern_repeat(TraceList **tracelist, AccessPattern **pattern_head, int mpirank, UT_lookup **lookup)
+{
+	TraceList *list_i = *tracelist;
+	//TraceList *list_j = NULL;
+
+	while(list_i != NULL && list_i->next != NULL){
+
+	}
+
+	return 0;
+}
 
 TraceList* addtmp(int filepos, int size, int op, double startTime, double endTime, int mpirank){
 
@@ -160,8 +288,8 @@ TraceList* addtmp(int filepos, int size, int op, double startTime, double endTim
 	return tmp;
 }
 
-int contig_check(TraceList *trace, AccessPattern *pattern){
-
+int contig_check(TraceList *trace, AccessPattern *pattern)
+{
 	//TODO support for same offset but different size
 	if(trace->mpirank == pattern->mpiRank && trace->offset == pattern->endPos + pattern->reqSize)
 		return 1;
@@ -169,8 +297,8 @@ int contig_check(TraceList *trace, AccessPattern *pattern){
 		return 0;
 }
 
-int stride_check(TraceList *trace, AccessPattern *pattern){
-
+int stride_check(TraceList *trace, AccessPattern *pattern)
+{
 	//TODO support for same offset but different size
 	if(trace->mpirank == pattern->mpiRank && trace->offset == pattern->endPos  + pattern->strideSize[0]
 	         && trace->size == pattern->reqSize)
@@ -179,7 +307,8 @@ int stride_check(TraceList *trace, AccessPattern *pattern){
 		return 0;
 }
 
-int pattern_contig(TraceList **tracelist, AccessPattern **pattern_head, int mpirank, UT_lookup **lookup){
+int pattern_contig(TraceList **tracelist, AccessPattern **pattern_head, int mpirank, UT_lookup **lookup)
+{
 	TraceList *list_i = *tracelist;
 	int isseq = 0;
 
@@ -279,8 +408,8 @@ int pattern_contig(TraceList **tracelist, AccessPattern **pattern_head, int mpir
 	return 0;
 }
 
-int pattern_fixed_stride(TraceList **tracelist, AccessPattern **pattern_head, int mpirank, UT_lookup **lookup){
-
+int pattern_fixed_stride(TraceList **tracelist, AccessPattern **pattern_head, int mpirank, UT_lookup **lookup)
+{
 	TraceList *list_i = *tracelist;
 	TraceList *list_j = NULL;
 	TraceList *list_k = NULL;
@@ -386,7 +515,8 @@ int pattern_fixed_stride(TraceList **tracelist, AccessPattern **pattern_head, in
 	return 0;
 }
 
-int trace_lookup(TraceList **tracelist, TraceList *new_record, UT_lookup **lookup, int mpirank){
+int trace_lookup(TraceList **tracelist, TraceList *new_record, UT_lookup **lookup, int mpirank)
+{
 
 	int findpattern = 0;
 
@@ -444,7 +574,8 @@ int trace_lookup(TraceList **tracelist, TraceList *new_record, UT_lookup **looku
 	return findpattern;
 }
 
-int trace_feed(TraceList **tracelist, TraceList *new_record, AccessPattern **pattern_head, int mpirank){
+int trace_feed(TraceList **tracelist, TraceList *new_record, AccessPattern **pattern_head, int mpirank)
+{
 
 	// for all known patterns check if new_event could fit in
 	// if yes then update the pattern with new_event
@@ -491,7 +622,8 @@ int trace_feed(TraceList **tracelist, TraceList *new_record, AccessPattern **pat
 	return findpattern;
 }
 
-int check_pattern_same(AccessPattern *p1, AccessPattern *p2){
+int check_pattern_same(AccessPattern *p1, AccessPattern *p2)
+{
 	int i;
 	for(i = 0; i < p1->k ; i++){
 		if(p1->patternType != p2->patternType || p1->strideSize[i] != p2->strideSize[i] ||p1->mpiRank != p2->mpiRank
@@ -503,7 +635,8 @@ int check_pattern_same(AccessPattern *p1, AccessPattern *p2){
 	return 1;
 }
 
-int merge_kd(AccessPattern **kdpattern_head, int k){
+int merge_kd(AccessPattern **kdpattern_head, int k)
+{
 
 	AccessPattern *pattern_i = *kdpattern_head;
 	AccessPattern *pattern_j = NULL;
