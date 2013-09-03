@@ -24,8 +24,14 @@ int *block_index;
 int block_index_size;
 int *block_num;
 int block_num_size;
+int commsize;
 Block_Hash *candidate;
 Block_Hash *result;
+
+TraceList *tmp_record;
+UT_lookup *lookup_tmp;
+UT_lookup *found;
+UT_lookup *lookup_replace;
 
 int qsort_compare (const void *a, const void *b) {
   return ( *(int*)a - *(int*)b );
@@ -50,8 +56,14 @@ int main(int argc, char *argv[]) {
 	TraceList *adio_read_list_head = NULL;
 	AccessPattern *pattern_head = NULL, *list_i;
 
+	tmp_record = addtmp(0, 0, 0, 0.0, 0.0, 0);
+
+
 	// look up hash table
 	UT_lookup *lookup = NULL;
+	lookup_tmp = (UT_lookup*)malloc( sizeof(UT_lookup) );
+
+	found = NULL;
 	candidate = NULL;
 	result = NULL;
 
@@ -92,46 +104,51 @@ int main(int argc, char *argv[]) {
 	//output pattern list
 	fprintf(fp,"%d\n%d\nOP            Pattern \t   MPIRank  StartTime    EndTime    #      Start    End   AccessSize #records StrideSize\n"
 			, totalbytes, totalpatterncnt);
-	DL_FOREACH(pattern_head, list_i){
-		if(list_i->patternType == SEQUENTIAL){
-			float five_num_summary[5];
-			qsort (list_i->reqOffesets, list_i->recordNum[0], sizeof(int), qsort_compare);
-			int req_arr_size = list_i->recordNum[0]-1;
-			five_num_summary[0] = list_i->reqOffesets[0];
-			five_num_summary[4] = list_i->reqOffesets[req_arr_size];
-			if(list_i->recordNum[0] % 2 == 0){//even
-				five_num_summary[2] = (list_i->reqOffesets[req_arr_size/2] + list_i->reqOffesets[req_arr_size/2 + 1])/2;
-				five_num_summary[1] = list_i->reqOffesets[req_arr_size/4];
-				five_num_summary[3] = list_i->reqOffesets[req_arr_size*3/4 + 1];
-			}
-			else{
-				five_num_summary[2] = list_i->reqOffesets[req_arr_size/2];
-				five_num_summary[1] = (list_i->reqOffesets[req_arr_size/4] + list_i->reqOffesets[req_arr_size/4 + 1]) / 2;
-				five_num_summary[3] = (list_i->reqOffesets[req_arr_size*3/4] + list_i->reqOffesets[req_arr_size*3/4 + 1]) / 2;
-			}
 
-			fprintf(fp,"%10s  %12s %4d %12lf %12lf  1 %8d %8d %8d %8d %8d"
-										,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime
-										, list_i->endTime, list_i->startPos, list_i->endPos,	0, list_i->recordNum[0] ,list_i->strideSize[0]);
-			fprintf(fp," \t (%f, %f, %f, %f, %f) \n"
-					,five_num_summary[0],five_num_summary[1],five_num_summary[2],five_num_summary[3],five_num_summary[4]);
-		}
-		// for strided
-		else if(list_i->k < 2){
-			fprintf(fp,"%10s  %12s %4d %12lf %12lf  1 %8d %8d %8d %8d %8d\n"
-							,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime, list_i->endTime
-							, list_i->startPos, list_i->endPos, list_i->reqSize, list_i->recordNum[0] ,list_i->strideSize[0]);
-		}
-		else{
-			fprintf(fp,"%10s  %12s\t%4d %12lf %12lf   %d %8d %8d\t",oname[list_i->operation - 1],"KD_STRIDED", list_i->mpiRank, list_i->startTime
-					, list_i->endTime, list_i->k, list_i->startPos, list_i->endPos);
+	int pattern_i = 0;
+	for(pattern_i = 0; pattern_i < commsize; pattern_i++){
+		DL_FOREACH(pattern_head, list_i){
+			if(list_i->patternType == SEQUENTIAL && list_i->mpiRank == pattern_i){
+				float five_num_summary[5];
+				qsort (list_i->reqOffesets, list_i->recordNum[0], sizeof(int), qsort_compare);
+				int req_arr_size = list_i->recordNum[0]-1;
+				five_num_summary[0] = list_i->reqOffesets[0];
+				five_num_summary[4] = list_i->reqOffesets[req_arr_size];
+				if(list_i->recordNum[0] % 2 == 0){//even
+					five_num_summary[2] = (list_i->reqOffesets[req_arr_size/2] + list_i->reqOffesets[req_arr_size/2 + 1])/2;
+					five_num_summary[1] = list_i->reqOffesets[req_arr_size/4];
+					five_num_summary[3] = list_i->reqOffesets[req_arr_size*3/4 + 1];
+				}
+				else{
+					five_num_summary[2] = list_i->reqOffesets[req_arr_size/2];
+					five_num_summary[1] = (list_i->reqOffesets[req_arr_size/4] + list_i->reqOffesets[req_arr_size/4 + 1]) / 2;
+					five_num_summary[3] = (list_i->reqOffesets[req_arr_size*3/4] + list_i->reqOffesets[req_arr_size*3/4 + 1]) / 2;
+				}
 
-			for(i=list_i->k-1; i >= 0;i--){
-				fprintf(fp,"(%d, %d, %d)",list_i->reqSize,list_i->recordNum[i],list_i->strideSize[i]);
+				fprintf(fp,"%10s  %12s %4d %12lf %12lf  1 %8d %8d %8d %8d %8d"
+											,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime
+											, list_i->endTime, list_i->startPos, list_i->endPos,	0, list_i->recordNum[0] ,list_i->strideSize[0]);
+				fprintf(fp," \t (%f, %f, %f, %f, %f) \n"
+						,five_num_summary[0],five_num_summary[1],five_num_summary[2],five_num_summary[3],five_num_summary[4]);
 			}
-			fprintf(fp,"\n");
+			// for strided
+			else if(list_i->k < 2  && list_i->mpiRank == pattern_i){
+				fprintf(fp,"%10s  %12s %4d %12lf %12lf  1 %8d %8d %8d %8d %8d\n"
+								,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime, list_i->endTime
+								, list_i->startPos, list_i->endPos, list_i->reqSize, list_i->recordNum[0] ,list_i->strideSize[0]);
+			}
+			else if(list_i->mpiRank == pattern_i){ //kd strided
+				fprintf(fp,"%10s  %12s\t%4d %12lf %12lf   %d %8d %8d\t",oname[list_i->operation - 1],"KD_STRIDED", list_i->mpiRank, list_i->startTime
+						, list_i->endTime, list_i->k, list_i->startPos, list_i->endPos);
+
+				for(i=list_i->k-1; i >= 0;i--){
+					fprintf(fp,"(%d, %d, %d)",list_i->reqSize,list_i->recordNum[i],list_i->strideSize[i]);
+				}
+				fprintf(fp,"\n");
+			}
 		}
 	}
+
 
 
 

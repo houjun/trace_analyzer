@@ -68,7 +68,7 @@ typedef struct ut_lookup{
 
 typedef struct blocknode {
 	int blocknum;		// key ~up to 2TB file with blksize 512B or more if size is flexible
-	int weight;			// alignment? or use first few bits for size use & to mask
+	int freq;			// alignment? or use first few bits for size use & to mask
     UT_hash_handle hh;
 } BlockNode;
 

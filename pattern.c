@@ -12,6 +12,7 @@
 #include "utlist.h"
 #include "uthash.h"
 
+extern int commsize;
 extern int block_size;
 extern int candidate_freq;
 extern int result_freq;
@@ -24,6 +25,11 @@ extern int *block_num;
 extern int block_num_size;
 extern Block_Hash *candidate;
 extern Block_Hash *result;
+
+extern TraceList *tmp_record;
+extern UT_lookup *lookup_tmp;
+extern UT_lookup *found;
+extern UT_lookup *lookup_replace;
 
 int read_radar(char *filename, TraceList **write_list, TraceList **read_list, AccessPattern **access_pattern, int *totalbytesrw, UT_lookup **lookup)
 {
@@ -38,19 +44,14 @@ int read_radar(char *filename, TraceList **write_list, TraceList **read_list, Ac
 	    printf("Error Reading File\n");
 	}
 
-	int mpirank, filepos, size;
-	int i,j, commsize, nrecords, mpairs;
+	int i, j, nrecords, mpairs;
 	char operator[MAX_LINE_LENGTH];
 	char filepath[MAX_LINE_LENGTH];
 	char processtmp[MAX_LINE_LENGTH];
-	double start_timedelta = 0.0;
-	double end_timedelta = 0.0;
 	int read_count = 0;
 	int write_count = 0;
 	int hierarchy_info;
-	TraceList *tmp = NULL;
-	char tmp_op;
-
+	int proc_num;
 
 	while(fgets(buf, MAX_LINE_LENGTH, fp)){
 		if (*buf == '#') continue; // ignore comment line
@@ -60,45 +61,41 @@ int read_radar(char *filename, TraceList **write_list, TraceList **read_list, Ac
 			//<Full File path> <MPI file comm size>
 			fgets(buf, MAX_LINE_LENGTH, fp);
 			sscanf(buf, "%s %d %d",filepath, &commsize, totalbytesrw);
+			proc_num = commsize;
 
-			while(commsize--){
+			while(proc_num--){
 				//PROCESS <MPI Rank> <n: number of trace entries>
 				fgets(buf, MAX_LINE_LENGTH, fp);
-				sscanf(buf, "%s %d %d",processtmp, &mpirank, &nrecords);
-
+				sscanf(buf, "%s %d %d",processtmp, &tmp_record->mpirank, &nrecords);
 				for(i=0; i < nrecords; i++){
 
 					//read next n records
 					fgets(buf, MAX_LINE_LENGTH, fp);
 					//<Op string> <Time delta> <m: # of accesses>
-					sscanf(buf, "%d %s %lf %lf %d",&hierarchy_info, operator, &start_timedelta, &end_timedelta, &mpairs);
+					sscanf(buf, "%d %s %lf %lf %d",&hierarchy_info, operator, &tmp_record->startTime, &tmp_record->endTime, &mpairs);
 
 					for(j=0; j < mpairs; j++){
 						fgets(buf, MAX_LINE_LENGTH, fp);
-						sscanf(buf, "%d, %d", &filepos, &size);
+						sscanf(buf, "%d, %d", &tmp_record->offset, &tmp_record->size);
 
+						AccessPattern *pattern_head = NULL, *list_i;
 						//add trace record
 						if(strstr(operator,"Read") != NULL){
 							if(strstr(operator,"Strided") != NULL)
-								tmp_op = T_ADIO_READSTRIDED;
+								tmp_record->op = T_ADIO_READSTRIDED;
 							else
-								tmp_op = T_ADIO_READ;
+								tmp_record->op = T_ADIO_READ;
 
-							tmp = addtmp(filepos, size, tmp_op, start_timedelta, end_timedelta, mpirank);
-							if(tmp==NULL)
-								return -1;
-							trace_analysis(read_list, tmp, access_pattern, &read_count, mpirank, lookup);
+							trace_analysis(read_list, tmp_record, access_pattern, &read_count, tmp_record->mpirank, lookup);
 							//just like below
 						}
 						else if(strstr(operator,"Write") != NULL){
 							if(strstr(operator,"Strided") != NULL)
-								tmp_op = T_ADIO_WRITESTRIDED;
+								tmp_record->op = T_ADIO_WRITESTRIDED;
 							else
-								tmp_op = T_ADIO_WRITE;
-							TraceList *tmp = addtmp(filepos, size, tmp_op, start_timedelta, end_timedelta, mpirank);
-							if(tmp==NULL)
-								return -1;
-							trace_analysis(write_list, tmp, access_pattern, &write_count, mpirank, lookup);
+								tmp_record->op = T_ADIO_WRITE;
+
+							trace_analysis(write_list, tmp_record, access_pattern, &write_count, tmp_record->mpirank, lookup);
 						}
 
 					}
@@ -106,8 +103,8 @@ int read_radar(char *filename, TraceList **write_list, TraceList **read_list, Ac
 				}
 
 				//perform final analysis when reach end of each process
-				trace_analysis(read_list, NULL, access_pattern, &read_count, mpirank, lookup);
-				trace_analysis(write_list, NULL, access_pattern, &write_count, mpirank, lookup);
+				trace_analysis(read_list, NULL, access_pattern, &read_count, tmp_record->mpirank, lookup);
+				trace_analysis(write_list, NULL, access_pattern, &write_count, tmp_record->mpirank, lookup);
 
 
 				read_count = 0;
@@ -125,8 +122,8 @@ int read_radar(char *filename, TraceList **write_list, TraceList **read_list, Ac
 				// clean up hash table
 				UT_lookup *current_lookup, *tmp;
 				HASH_ITER(hh, *lookup, current_lookup, tmp) {
-					HASH_DEL(*lookup,current_lookup);  //delete it (users advances to next)
-					free(current_lookup);            // free it
+					HASH_DEL(*lookup,current_lookup);
+					free(current_lookup);
 				}
 
 			}
@@ -143,8 +140,13 @@ int trace_analysis(TraceList **list, TraceList *tmp, AccessPattern **access_patt
 {
 	int decreasecount;
 
-	if(tmp != NULL && !trace_lookup(list, tmp, lookup, mpirank))
+	if(tmp != NULL && !trace_lookup(list, tmp, lookup, mpirank)){
 		(*count)++;
+		TraceList *add_tmp = addtmp(tmp->offset, tmp->size, tmp->op, tmp->startTime, tmp->endTime, tmp->mpirank);
+		DL_APPEND(*list, add_tmp);
+	}
+	else
+		return 0;
 
 	// perform sequential analysis
 	if(*count > SEQ_LIST_THRESHOLD || tmp == NULL){
@@ -154,7 +156,8 @@ int trace_analysis(TraceList **list, TraceList *tmp, AccessPattern **access_patt
 		*count = *count - decreasecount;
 	}
 
-	// non sequential analysis
+	/*
+	// freq analysis
 	if(*count > freq_list_size || tmp == NULL){
 
 		// map to block
@@ -163,13 +166,81 @@ int trace_analysis(TraceList **list, TraceList *tmp, AccessPattern **access_patt
 
 		*count = 0;
 	}
-
+*/
 	return 0;
+}
+
+
+int trace_lookup(TraceList **tracelist, TraceList *new_record, UT_lookup **lookup, int mpirank)
+{
+
+	int findpattern = 0;
+
+    memset(lookup_tmp, 0, sizeof(UT_lookup));
+	lookup_tmp->key.op = new_record->op;
+	lookup_tmp->key.off = new_record->offset;
+	lookup_tmp->key.mpirank = new_record->mpirank;
+
+	// look up
+	HASH_FIND(hh, *lookup, &lookup_tmp->key, sizeof(Lookup_key), found);
+
+	// found corresponding pattern
+	if(found != NULL){
+		// update pattern and hash table
+		if(found->pattern->patternType== CONTIGUOUS || found->pattern->patternType == SEQUENTIAL){
+
+			lookup_replace = (UT_lookup*)malloc( sizeof(UT_lookup) );
+			lookup_replace->pattern = found->pattern;
+			lookup_replace->pattern->recordNum[0] ++;
+			lookup_replace->pattern->endPos = new_record->offset;
+			lookup_replace->key.op= found->key.op;
+			lookup_replace->key.mpirank = found->key.mpirank;
+			lookup_replace->pattern->reqSize = new_record->size;
+
+			if(found->pattern->patternType == SEQUENTIAL){
+				lookup_replace->pattern->reqOffesets[lookup_replace->pattern->recordNum[0]-1] = new_record->size;
+			}
+
+			lookup_replace->key.off = new_record->offset + new_record->size;
+			HASH_REPLACE(hh, *lookup, key, sizeof(Lookup_key), lookup_replace, found);
+
+			findpattern++;
+		}
+		else if(found->pattern->patternType == KD_STRIDED){
+
+			lookup_replace = (UT_lookup*)malloc( sizeof(UT_lookup) );
+			lookup_replace->pattern = found->pattern;
+			lookup_replace->pattern->recordNum[0] ++;
+			lookup_replace->pattern->endPos = new_record->offset;
+			lookup_replace->key.op= found->key.op;
+			lookup_replace->key.mpirank = found->key.mpirank;
+			lookup_replace->key.off = new_record->offset + found->pattern->strideSize[0];
+
+			HASH_REPLACE(hh, *lookup, key, sizeof(Lookup_key), lookup_replace, found);
+			findpattern++;
+		}
+	}
+
+	if(findpattern == 0){
+		if(new_record==NULL){
+			printf("Can't feed NULL!\n");
+			return 0;
+		}
+
+	}
+
+	return findpattern;
+}
+
+int sort_by_freq(BlockNode *a, BlockNode *b)
+{
+	 if (a->freq == b->freq) return 0;
+	 return (a->freq < b->freq) ? -1 : 1;
 }
 
 int compareBlockNum(const void * a, const void * b)
 {
-  return ( *(int*)a - *(int*)b );
+	return ( *(int*)a - *(int*)b );
 }
 
 int offset_to_block(TraceList **tracelist)
@@ -266,12 +337,12 @@ int freq_analysis(int totalcnt)
 
 			if(tmp_blk != NULL){
 				// found previous one, just update
-				tmp_blk->weight++;
+				tmp_blk->freq++;
 				continue;
 			}
 			tmp_blk = malloc(sizeof(BlockNode));
 			tmp_blk->blocknum = block_index[j];
-			tmp_blk->weight = 1;
+			tmp_blk->freq = 1;
 
 			HASH_ADD_INT(tmp_switch->next, blocknum, tmp_blk);
 
@@ -537,112 +608,6 @@ int pattern_fixed_stride(TraceList **tracelist, AccessPattern **pattern_head, in
 	return 0;
 }
 
-int trace_lookup(TraceList **tracelist, TraceList *new_record, UT_lookup **lookup, int mpirank)
-{
-
-	int findpattern = 0;
-
-	UT_lookup *tmp = (UT_lookup*)malloc( sizeof(UT_lookup) );
-	if(tmp==NULL){
-		printf("Malloc Error!\n");
-		return -1;
-	}
-	UT_lookup *found = NULL;
-
-    memset(tmp, 0, sizeof(UT_lookup));
-	tmp->key.op = new_record->op;
-	tmp->key.off = new_record->offset;
-	tmp->key.mpirank = new_record->mpirank;
-
-	// look up
-	HASH_FIND(hh, *lookup, &tmp->key, sizeof(Lookup_key), found);
-
-	// found corresponding pattern
-	if(found != NULL){
-		// update pattern and hash table
-		if(found->pattern->patternType== CONTIGUOUS || found->pattern->patternType == SEQUENTIAL){
-			found->pattern->recordNum[0] ++;
-			found->pattern->endPos = new_record->offset;
-			found->pattern->reqSize = new_record->size;
-
-			if(found->pattern->patternType == SEQUENTIAL){
-				found->pattern->reqOffesets[found->pattern->recordNum[0]-1] = new_record->size;
-			}
-
-			found->key.off = new_record->offset + new_record->size;
-
-			findpattern++;
-		}
-		else if(found->pattern->patternType == KD_STRIDED){
-			found->pattern->recordNum[0] ++;
-			found->pattern->endPos = new_record->offset;
-
-			found->key.off = new_record->offset + found->pattern->strideSize[0];
-			findpattern++;
-		}
-	}
-
-	if(findpattern == 0){
-		if(new_record==NULL){
-			printf("Can't feed NULL!\n");
-			return 0;
-		}
-
-		// if no pattern fit then add to trace list
-		DL_APPEND(*tracelist, new_record);
-		free(tmp);
-	}
-
-	return findpattern;
-}
-
-int trace_feed(TraceList **tracelist, TraceList *new_record, AccessPattern **pattern_head, int mpirank)
-{
-
-	// for all known patterns check if new_event could fit in
-	// if yes then update the pattern with new_event
-	// return (Pattern);
-	AccessPattern *pattern = *pattern_head;
-	int findpattern = 0;
-	while(pattern != NULL){
-		if(pattern->patternType == CONTIGUOUS || pattern->patternType == SEQUENTIAL){
-			if(contig_check(new_record, pattern)){
-				pattern->recordNum[0] ++;
-				pattern->endPos = new_record->offset;
-				pattern->reqSize = new_record->size;
-				//pattern->endTime = new_record->op_time;
-				if(pattern->patternType == SEQUENTIAL){
-					pattern->reqOffesets[pattern->recordNum[0]-1] = new_record->size;
-				}
-
-				findpattern++;
-			}
-		}
-		else if(pattern->patternType == KD_STRIDED){
-			if(stride_check(new_record, pattern)){
-				pattern->recordNum[0] ++;
-				pattern->endPos = new_record->offset;
-				//pattern->endTime = new_record->op_time;
-				findpattern++;
-			}
-		}
-		pattern = pattern->next;
-	}
-
-	// if could fit to pattern then don't add to trace list
-	if(findpattern == 0){
-		if(new_record==NULL){
-			printf("Can't feed NULL!\n");
-			return 0;
-		}
-
-		// if no pattern fit then add to trace list
-		DL_APPEND(*tracelist, new_record);
-
-	}
-
-	return findpattern;
-}
 
 int check_pattern_same(AccessPattern *p1, AccessPattern *p2)
 {
