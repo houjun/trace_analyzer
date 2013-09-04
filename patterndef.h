@@ -54,7 +54,7 @@ typedef struct tracelist {
 // currently only use operation, rank, offset as key
 // request size not used because of sequential pattern
 typedef struct lookup_key {
-	char op;
+	int op;
 	int mpirank;
 	int off;
 } Lookup_key;
@@ -81,19 +81,19 @@ typedef struct freq_block{
 
 // read from RADAR trace file
 int read_radar(char* filename, TraceList** write_list, TraceList** read_list, AccessPattern** access_pattern
-		, int* totalbytes, UT_lookup **lookup);
+		, int* totalbytes);
 
 // detect contiguous pattern from same process
-int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup);
+int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpirank);
 
 // detect 1-D strided pattern from same process
-int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank, UT_lookup **lookup);
+int pattern_fixed_stride(TraceList** tracelist, AccessPattern** pattern_head, int mpirank);
 
 // detect frequent access pattern
 int freq_analysis(int totalcnt);
 
 // lookup in hash table
-int trace_lookup(TraceList **tracelist, TraceList *new_record, UT_lookup **lookup, int mpirank);
+int trace_lookup(TraceList **tracelist, TraceList *new_record, int mpirank);
 
 // check if one trace record could be fitted into a known contiguous pattern
 int contig_check(TraceList* trace, AccessPattern* pattern);
@@ -108,8 +108,7 @@ int offset_to_block(TraceList **tracelist);
 int trace_feed(TraceList** tracelist, TraceList* new_record, AccessPattern** pattern_head, int mpirank);
 
 // decide when to perform pattern detection algorithm to insert found pattern to known pattern list
-int trace_analysis(TraceList** list, TraceList* tmp, AccessPattern** access_pattern, int* count, int mpirank
-		, UT_lookup **lookup);
+int trace_analysis(TraceList** list, TraceList* tmp, AccessPattern** access_pattern, int* count, int mpirank);
 
 // check if two pattern are same for patternType, strideSize, mpiRank and k value
 int check_pattern_same(AccessPattern* p1, AccessPattern* p2);

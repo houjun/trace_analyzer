@@ -29,9 +29,10 @@ Block_Hash *candidate;
 Block_Hash *result;
 
 TraceList *tmp_record;
-UT_lookup *lookup_tmp;
+UT_lookup lookup_tmp;
 UT_lookup *found;
 UT_lookup *lookup_replace;
+UT_lookup *lookup;
 
 int qsort_compare (const void *a, const void *b) {
   return ( *(int*)a - *(int*)b );
@@ -60,9 +61,7 @@ int main(int argc, char *argv[]) {
 
 
 	// look up hash table
-	UT_lookup *lookup = NULL;
-	lookup_tmp = (UT_lookup*)malloc( sizeof(UT_lookup) );
-
+	lookup = NULL;
 	found = NULL;
 	candidate = NULL;
 	result = NULL;
@@ -80,7 +79,7 @@ int main(int argc, char *argv[]) {
 	int i = 0;
 
 	//read from file and perform analysis
-	read_radar(argv[1], &adio_write_list_head, &adio_read_list_head, &pattern_head, &totalbytes, &lookup);
+	read_radar(argv[1], &adio_write_list_head, &adio_read_list_head, &pattern_head, &totalbytes);
 
 	//merge kd patterns
 	for(i = 2; i <= PATTERN_K_SIZE_MAX; i++){
