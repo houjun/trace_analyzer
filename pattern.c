@@ -27,7 +27,6 @@ extern Block_Hash *candidate;
 extern Block_Hash *result;
 
 extern TraceList *tmp_record;
-extern UT_lookup lookup_tmp;
 extern UT_lookup *found;
 extern UT_lookup *lookup_replace;
 extern UT_lookup *lookup;
@@ -175,15 +174,14 @@ int trace_lookup(TraceList **tracelist, TraceList *new_record, int mpirank)
 
 	int findpattern = 0;
 
-	lookup_tmp.key.op = new_record->op;
-	lookup_tmp.key.off = new_record->offset;
-	lookup_tmp.key.mpirank = new_record->mpirank;
-
 	// look up
-	HASH_FIND(hh, lookup, &lookup_tmp.key, sizeof(Lookup_key), found);
+	HASH_FIND_INT(lookup, &new_record->offset, found);
 
 	// found corresponding pattern
 	if(found != NULL){
+		if(found->pattern->mpiRank != new_record->mpirank || found->pattern->operation != new_record->op)
+			return -1;
+
 		// update pattern and hash table
 		if(found->pattern->patternType== CONTIGUOUS || found->pattern->patternType == SEQUENTIAL){
 
@@ -191,17 +189,15 @@ int trace_lookup(TraceList **tracelist, TraceList *new_record, int mpirank)
 			lookup_replace->pattern = found->pattern;
 			lookup_replace->pattern->recordNum[0] ++;
 			lookup_replace->pattern->endPos = new_record->offset;
-			lookup_replace->key.op= found->key.op;
-			lookup_replace->key.mpirank = found->key.mpirank;
 			lookup_replace->pattern->reqSize = new_record->size;
 
 			if(found->pattern->patternType == SEQUENTIAL){
 				lookup_replace->pattern->reqOffesets[lookup_replace->pattern->recordNum[0]-1] = new_record->size;
 			}
 
-			lookup_replace->key.off = new_record->offset + new_record->size;
+			lookup_replace->key = new_record->offset + new_record->size;
 			HASH_DEL(lookup, found);
-		    HASH_ADD(hh, lookup, key, sizeof(Lookup_key), lookup_replace);
+		    HASH_ADD_INT(lookup, key, lookup_replace);
 
 			free(found);
 			findpattern++;
@@ -212,13 +208,11 @@ int trace_lookup(TraceList **tracelist, TraceList *new_record, int mpirank)
 			lookup_replace->pattern = found->pattern;
 			lookup_replace->pattern->recordNum[0] ++;
 			lookup_replace->pattern->endPos = new_record->offset;
-			lookup_replace->key.op= found->key.op;
-			lookup_replace->key.mpirank = found->key.mpirank;
-			lookup_replace->key.off = new_record->offset + found->pattern->strideSize[0];
+			lookup_replace->key = new_record->offset + found->pattern->strideSize[0];
 
 			//HASH_REPLACE(hh, *lookup, key, sizeof(Lookup_key), lookup_replace, found);
 			HASH_DEL(lookup, found);
-		    HASH_ADD(hh, lookup, key, sizeof(Lookup_key), lookup_replace);
+		    HASH_ADD_INT(lookup, key, lookup_replace);
 
 			free(found);
 			findpattern++;
@@ -485,12 +479,10 @@ int pattern_contig(TraceList **tracelist, AccessPattern **pattern_head, int mpir
 				// add to look up hash table
 				UT_lookup *tmp = (UT_lookup*)malloc( sizeof(UT_lookup) );
 			    memset(tmp, 0, sizeof(UT_lookup));
-				tmp->key.op = contig_pattern->operation;
-				tmp->key.mpirank = contig_pattern->mpiRank;
-				tmp->key.off = contig_pattern->endPos + contig_pattern->reqSize;
+				tmp->key = contig_pattern->endPos + contig_pattern->reqSize;
 				tmp->pattern = contig_pattern;
 
-			    HASH_ADD(hh, lookup, key, sizeof(Lookup_key), tmp);
+			    HASH_ADD_INT(lookup, key, tmp);
 
 				// if one contig pattern is found then return
 				return contig_pattern->recordNum[0];
@@ -591,13 +583,10 @@ int pattern_fixed_stride(TraceList **tracelist, AccessPattern **pattern_head, in
 				// add to look up hash table
 				UT_lookup *tmp = (UT_lookup*)malloc( sizeof(UT_lookup) );
 			    memset(tmp, 0, sizeof(UT_lookup));
-				tmp->key.op = stride_pattern->operation;
-				tmp->key.mpirank = stride_pattern->mpiRank;
-				tmp->key.off = stride_pattern->endPos + stride_pattern->strideSize[0];
+				tmp->key = stride_pattern->endPos + stride_pattern->strideSize[0];
 				tmp->pattern = stride_pattern;
 
-			    HASH_ADD(hh, lookup, key, sizeof(Lookup_key), tmp);
-
+			    HASH_ADD_INT(lookup, key, tmp);
 				// if one stride pattern is found then return
 				return stride_pattern->recordNum[0];
 			}

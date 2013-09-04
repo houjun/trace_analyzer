@@ -51,16 +51,10 @@ typedef struct tracelist {
     struct tracelist *next;
 } TraceList;
 
-// currently only use operation, rank, offset as key
-// request size not used because of sequential pattern
-typedef struct lookup_key {
-	int op;
-	int mpirank;
-	int off;
-} Lookup_key;
+// currently only use operation offset as key
 
 typedef struct ut_lookup{
-	Lookup_key key;
+	int key;	// key is offset
 	AccessPattern *pattern;
     UT_hash_handle hh;
 } UT_lookup;

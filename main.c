@@ -29,7 +29,6 @@ Block_Hash *candidate;
 Block_Hash *result;
 
 TraceList *tmp_record;
-UT_lookup lookup_tmp;
 UT_lookup *found;
 UT_lookup *lookup_replace;
 UT_lookup *lookup;
