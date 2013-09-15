@@ -29,7 +29,7 @@ int main (int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
     int i,j,iter;
-    int n = 10000;
+    int n = atoi(argv[2]);
     int **mymat, *allmat;
     double start_time, end_time, total_time;
     double sum,temp,diff,bb,e;
@@ -52,6 +52,7 @@ int main (int argc, char *argv[])
     start_time = MPI_Wtime();
 
 //    MPI_Barrier(MPI_COMM_WORLD);
+//  TODO: split one read to multiple ones
     MPI_File fh;
     MPI_File_open(MPI_COMM_WORLD, argv[1], MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
     MPI_File_set_view( fh, (n+1) * myrows * my_rank * sizeof(int), MPI_INT, MPI_INT, "native", MPI_INFO_NULL );
