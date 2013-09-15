@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
 #include "mpi.h"
 
 void print_x(int iter, int n, double* x)
@@ -22,20 +23,21 @@ int main (int argc, char *argv[])
     int proc_num, my_rank;
 
     MPI_Status status;
-    MPI_Request *request;
+    MPI_Request request;
     MPI_File fh;
 
     int i, j, k, iter;
-    int n = atoi(argv[2]);
     int **mymat, *allmat;
+
     double start_time, end_time, io_time;
     double total_time_start, total_time_end;
     double sum, temp, diff, bb, allbb;
     double e = 0.000001;
     double *x, *myx;
 
-    int split = 10;
+    int split = 4;
     int split_rows;
+    int compare_mode = 0;
 
     // Init MPI
     MPI_Init(&argc, &argv);
@@ -44,19 +46,39 @@ int main (int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &proc_num);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
-    if(argc < 2)
+    if(argc < 3){
     	printf("Usage: jacobi mat.bin dim\n");
+    	return -1;
+    }
+    else if(argc == 4){
+    	// compare mode
+    	// 0 means no prefetch, 1 means prefetch
+    	compare_mode = atoi(argv[3]);
+    	if(my_rank == 0 ){
+    		if(compare_mode == 1)
+    			printf("Using prefetching\n");
+    		else
+    			printf("No prefetching\n");
+    	}
+    }
 
+    MPI_Bcast( &compare_mode, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // dimension of the input matrix
+    int n = atoi(argv[2]);
     int myrows = n / proc_num;
+    split_rows = myrows / split;
 
-    /*
-        if(my_rank == -1) {
-            int dowait = 1;
-            while(dowait) {
-                ;
-            }
-        }
-    */
+    // CACHE Allocation
+    int *prefetch_cache = malloc( split_rows * (n+1) * sizeof(int));
+
+	if(my_rank == -1) {
+		int dowait = 1;
+		while(dowait) {
+			;
+		}
+	}
+
 
     total_time_start = MPI_Wtime();
 
@@ -75,8 +97,10 @@ int main (int argc, char *argv[])
 
     // split one read to multiple ones
     MPI_File_open(MPI_COMM_WORLD, argv[1], MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
-
-    split_rows = myrows / split;
+    if(fh==NULL){
+    	printf("File not exist\n");
+    	return -1;
+    }
 
     io_time = 0.0;
     // each proc read split_rows rows of the matrix, perform first iteration of computation
@@ -86,8 +110,37 @@ int main (int argc, char *argv[])
 
         start_time = MPI_Wtime();
 
-        MPI_File_read_at(fh, (n+1)  * sizeof(int) * (myrows * my_rank + k * split_rows)
-        		, &allmat[k * split_rows * (n+1)], split_rows * (n+1), MPI_INT, &status);
+        if(compare_mode == 1){
+        	// prefetch mode
+			if(k == 0){
+				// first time read, no pattern information known so just normal read
+				MPI_File_read_at(fh, (myrows * my_rank + k * split_rows) * (n+1)  * sizeof(int)
+						, &allmat[k * split_rows * (n+1)], split_rows * (n+1), MPI_INT, &status);
+
+				// According to previous read, predict the next read
+				// use non-blocking read so computation could be performed at the same time
+				MPI_File_iread_at(fh, (n+1)  * sizeof(int) * (myrows * my_rank + (k+1) * split_rows)
+									, prefetch_cache, split_rows * (n+1), MPI_INT, &request);
+			}
+			else{
+				// wait for previous iread(prefetched the predicted next access) completed
+				MPI_Wait(&request, &status);
+
+				// copy prefetched data from cache to target
+				memcpy(&allmat[k * split_rows * (n+1)], prefetch_cache, split_rows * (n+1)* sizeof(int));
+
+				// next read is predicted so perform prefetch
+				if(k != split -1){
+					MPI_File_iread_at(fh, (n+1)  * sizeof(int) * (myrows * my_rank + (k+1) * split_rows)
+									, prefetch_cache, split_rows * (n+1), MPI_INT, &request);
+				}
+			}
+        }
+        else{
+        	// no prefetch
+			MPI_File_read_at(fh, (myrows * my_rank + k * split_rows) * (n+1)  * sizeof(int)
+					, &allmat[k * split_rows * (n+1)], split_rows * (n+1), MPI_INT, &status);
+        }
 
         MPI_Barrier(MPI_COMM_WORLD);
 
@@ -133,8 +186,8 @@ int main (int argc, char *argv[])
             }
             printf("\n");
         }
-*/
-    
+
+ */
 
     // start next iteration of computation till converge
     iter=1;
