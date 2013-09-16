@@ -176,7 +176,7 @@ int main (int argc, char *argv[])
     MPI_File_close( &fh );
 
     if(my_rank == 0)
-    	printf("n=%d, reading time: %lf, bandwidth: %.2lfMB/s\n", n, io_time, n*(n+1)*4.0/(io_time*1024*1024));
+    	printf("n=%d, reading time: %lf  bandwidth: %.2lf MB/s\n", n, io_time, n*(n+1)*4.0/(io_time*1024*1024));
 
 /*
         printf("rank %d:\n",my_rank);
@@ -247,6 +247,7 @@ int main (int argc, char *argv[])
     free(mymat);
     free(myx);
     free(x);
+    free(prefetch_cache);
     MPI_Finalize();
     return 0;
 
