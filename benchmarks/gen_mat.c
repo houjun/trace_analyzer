@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 #define MAXVALUE 400
 
 int check_matrix(int** mat,int n)
@@ -21,7 +22,7 @@ int check_matrix(int** mat,int n)
     return 1;
 }
 int main(int argc, char *argv[]) {
-
+        srand (time(NULL));
         FILE *fout;
         int i,j;
 

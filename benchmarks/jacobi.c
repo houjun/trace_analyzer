@@ -35,7 +35,7 @@ int main (int argc, char *argv[])
     double e = 0.000001;
     double *x, *myx;
 
-    int split = 4;
+    int split = 16;
     int split_rows;
     int compare_mode = 0;
 
@@ -106,8 +106,6 @@ int main (int argc, char *argv[])
     // each proc read split_rows rows of the matrix, perform first iteration of computation
     for(k = 0; k < split; k++){
 
-        MPI_Barrier(MPI_COMM_WORLD);
-
         start_time = MPI_Wtime();
 
         if(compare_mode == 1){
@@ -177,18 +175,17 @@ int main (int argc, char *argv[])
 
     if(my_rank == 0)
     	printf("n=%d, reading time: %lf  bandwidth: %.2lf MB/s\n", n, io_time, n*(n+1)*4.0/(io_time*1024*1024));
-
 /*
-        printf("rank %d:\n",my_rank);
-        for(i=0; i<myrows; i++) {
-            for(j=0; j<n+1; j++) {
-                printf(" %4d", mymat[i][j]);
-            }
-            printf("\n");
-        }
+    // print matrix
+	printf("rank %d:\n",my_rank);
+	for(i=0; i<myrows; i++) {
+		for(j=0; j<n+1; j++) {
+			printf(" %4d", mymat[i][j]);
+		}
+		printf("\n");
+	}
 
- */
-
+*/
     // start next iteration of computation till converge
     iter=1;
     double compute_time = MPI_Wtime();
