@@ -23,12 +23,18 @@ int main (int argc, char *argv[])
     // get host name
     //MPI_Get_processor_name(hostname, &len);
     
-    
-    char **mem = (char**)malloc(128*sizeof(char*));
-    for(i = 0; i < 128; i++)
-        mem = malloc(SIZE*sizeof(char));
+    // flush_size in GB
+    int flush_size = atoi(argv[1]);
+
+    printf("Will allocate %d GB in total\n", flush_size);
+    flush_size = flush_size * 1024.0*1024.0*1024.0 / SIZE;
+
+    char **mem = (char**)malloc(flush_size*sizeof(char*));
+    for(i = 0; i < flush_size; i++)
+        mem[i] = malloc(SIZE*sizeof(char));
+
     // each node allocates 1G memory until use up memory.
-    for(i = 0; i < 128; i++){
+    for(i = 0; i < flush_size; i++){
         mem = malloc(SIZE*sizeof(char));
         if(mem==NULL){
             printf("allocated %.2lf GB, no more available space\n", (double)(i * (SIZE/(1024.0*1024.0*1024.0))) );
@@ -37,8 +43,16 @@ int main (int argc, char *argv[])
         memset(mem, 0, SIZE);
     }
 
+
+    char tmp;
+    printf("Press any key to terminate the program\n");
+    tmp = getchar();
     
-    
+
+    for(i = 0; i < flush_size; i++)
+        free(mem[i]);
+    free(mem);
+
     MPI_Finalize();
 
     return 0;
