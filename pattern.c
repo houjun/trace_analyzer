@@ -688,9 +688,10 @@ int merge_kd(AccessPattern **kdpattern_head, int k)
 							}
 							else{
 								if(pattern_k->startPos - tmpstartpos != pattern_i->strideSize[pattern_j->k]){
-									pattern_j = pattern_j->next;
+									pattern_k = pattern_k->next;
 									continue;
 								}
+
 								pattern_i->recordNum[pattern_i->k-1]++;
 								pattern_i->endPos = pattern_k->endPos;
 								tmpstartpos = pattern_k->startPos;
