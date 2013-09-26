@@ -120,10 +120,6 @@ int main (int argc, char *argv[])
     // each round read entire matrix and prefetch next round
     for(k = 0; k < mat_num; k++){
 
-    	// set local and global x to zero for each iteration
-        memset( myx, 0, sizeof(myx[0]) * myrows );
-        memset( x, 0, sizeof(x[0]) * myrows );
-
         // I/O time
         io_time_start = MPI_Wtime();
 
@@ -180,6 +176,10 @@ int main (int argc, char *argv[])
         	}
 #endif
 
+
+    	// set local and global x to zero for each iteration
+        memset( myx, 0, sizeof(myx[0]) * myrows );
+        memset( x, 0, sizeof(x[0]) * myrows );
 
 	    compute_time_start = MPI_Wtime();
 		// start  iteration of computation till converge

@@ -1,0 +1,20 @@
+# clustered graph example from Derek Bruening's CGO 2005 talk
+=cluster;Origional Total Time;Prefetching Total Time;Computation Time
+=patterns
+=table
+=nogridy
+yformat=%g
+#max=100
+=norotate
+title=8 matrices each with 4k rows, 513M
+ylabel=Time(seconds)
+xlabel=Number of Processes
+# stretch it out in x direction
+xscale=1.2
+
+#data
+2	4.118057	3.961045	3.880909
+4	2.735893	2.638616	2.576301
+8	2.349613	1.602388	1.553383
+16	1.883633	1.161839	1.121044
+32	1.704017	0.978251	0.944284
