@@ -11,7 +11,7 @@ static size_t mins(size_t a, size_t b) { return a < b ? a : b; }
 
 void usage(){
     printf( "Usage:\n"
-			"gen_4D FILENAME B X Y Z T\n");
+			"gen_4D FILENAME.0~9 B X Y Z t\n");
     exit(1);
 }
 int main(int argc, char *argv[])

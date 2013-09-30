@@ -26,10 +26,11 @@ int main(int argc, char *argv[])
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
     // check arguments
-    if (argc != 11){ usage(); }
+    if (argc != 10){ usage(); }
 
     int b, x, y, z, t_start, t_end, t_replay_start, t_replay_end, replay_time;
-    int i, j, k, t;
+    int i, j, k, t, m, n, tmp;
+    int err;
     MPI_Status status;
 
     // init
@@ -42,7 +43,7 @@ int main(int argc, char *argv[])
     t_end = atoi(argv[7]);
     t_replay_start = atoi(argv[8]); // "replay" start time step
     t_replay_end = atoi(argv[9]);
-    replay_time = atoi(argv[10]);
+
 
     printf("b:%d x:%d y:%d z:%d t_start:%d t_end:%d t_replay_start:%d t_replay_start:%d \n",
     		b, x, y, z, t_start, t_end, t_replay_start, t_replay_end);
@@ -75,16 +76,26 @@ int main(int argc, char *argv[])
     int *buf = (int*)malloc(myreadsize * sizeof(int));
     assert(buf != NULL);
 
+
     // Open file
-    int err = MPI_File_open(MPI_COMM_WORLD, fname, MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
+    err = MPI_File_open(MPI_COMM_WORLD, fname, MPI_MODE_RDONLY, MPI_INFO_NULL, &fh);
     assert(err == MPI_SUCCESS);
 
     int start_offset = 0;
     int read_cnt = 0;
-    // First read all from t_start to t_end
+    double start, finish;
+    double total_io = 0.0;
+
     for(t = t_start; t < t_end; t++){
+
+        // start together
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        start = MPI_Wtime();
+
     	// each time step start offset is t*b*x*y*z*sizeof(int)
     	start_offset = t * b * x * y * z;
+
     	// read a slice of each time step
     	for(i = 0; i < z; i++){
         	for(j = 0; j < myrows; j++){
@@ -94,24 +105,68 @@ int main(int argc, char *argv[])
         	}
     	}
 
+        finish = MPI_Wtime();
+        if(my_rank == 0) printf("%d: I/O time %lf\n", t, finish - start);
+
+        start = MPI_Wtime();
+
+        // do some computation here
+        for(n = 0; n < 100; n++){
+            tmp = 0;
+            for(m = 0; m < z * myrows * myonereadsize; m++){
+                tmp++;
+            }
+        }
+    
+        finish = MPI_Wtime();
+        if(my_rank == 0) printf("%d: Computation time %lf\n", t, finish - start);
+
     }
 
-    for(t = t_replay_start; t < t_replay_end; k++){
+
+    read_cnt = 0;
+    for(t = t_replay_start; t < t_replay_end; t++){
+
+        // start together
+        MPI_Barrier(MPI_COMM_WORLD);
+
+        start = MPI_Wtime();
+
     	// each time step start offset is t*b*x*y*z*sizeof(int)
-		start_offset = t * b * x * y * z;
-		// read a slice of each time step
-		for(i = 0; i < z; i++){
-			for(j = 0; j < myrows; j++){
-				MPI_File_read_at(fh, (start_offset + i*b*x*y + j*b*x + my_rank * myonereadsize * myrows) * sizeof(int)
-						, &buf[read_cnt*myonereadsize], myonereadsize, MPI_INT, &status);
-				read_cnt++;
-			}
-		}
+    	start_offset = t * b * x * y * z;
+
+    	// read a slice of each time step
+    	for(i = 0; i < z; i++){
+        	for(j = 0; j < myrows; j++){
+        		MPI_File_read_at(fh, (start_offset + i*b*x*y + j*b*x + my_rank * myonereadsize * myrows) * sizeof(int)
+        				, &buf[read_cnt*myonereadsize], myonereadsize, MPI_INT, &status);
+        		read_cnt++;
+        	}
+    	}
+
+        finish = MPI_Wtime();
+        if(my_rank == 0) printf("%d: I/O time %lf\n", t, finish - start);
+
+        start = MPI_Wtime();
+
+        // do some computation here
+        for(n = 0; n < 100; n++){
+            tmp = 0;
+            for(m = 0; m < z * myrows * myonereadsize; m++){
+                tmp++;
+            }
+        }
+    
+        finish = MPI_Wtime();
+        if(my_rank == 0) printf("%d: Computation time %lf\n", t, finish - start);
+
     }
+
 
     err = MPI_File_close(&fh);
-    //assert(err == MPI_SUCCESS);
+    assert(err == MPI_SUCCESS);
 
+    /*
     // check read numbers
     if(my_rank == 1){
 		int cnt = 0;
@@ -124,6 +179,8 @@ int main(int argc, char *argv[])
 		}
 		printf("\n");
     }
+
+    */
 	free(buf);
 
 	MPI_Finalize();
