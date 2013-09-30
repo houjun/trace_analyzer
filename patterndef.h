@@ -28,14 +28,14 @@ typedef struct pattern {
     char patternType;
     int k;
     int mpiRank;
-    int startPos;
-    int endPos;
-    int reqSize;
-    int strideSize[PATTERN_K_SIZE_MAX];
-    int recordNum[PATTERN_K_SIZE_MAX];
+    uint64_t startPos;
+    uint64_t  endPos;
+    uint64_t  reqSize;
+    uint64_t  strideSize[PATTERN_K_SIZE_MAX];
+    uint64_t  recordNum[PATTERN_K_SIZE_MAX];
     double startTime;
     double endTime;
-    int reqOffesets[1024];
+    uint64_t  reqOffesets[1024];
     struct pattern *prev;
     struct pattern *next;
 } AccessPattern;
@@ -43,8 +43,8 @@ typedef struct pattern {
 typedef struct tracelist {
     char op;
     int mpirank;
-    int offset;
-    int size;
+    uint64_t  offset;
+    uint64_t  size;
     double startTime;
     double endTime;
     struct tracelist *prev;
@@ -54,7 +54,7 @@ typedef struct tracelist {
 // currently only use operation offset as key
 
 typedef struct ut_lookup{
-	int key;	// key is offset
+	uint64_t  key;	// key is offset
 	AccessPattern *pattern;
     UT_hash_handle hh;
 } UT_lookup;
@@ -75,7 +75,7 @@ typedef struct freq_block{
 
 // read from RADAR trace file
 int read_radar(char* filename, TraceList** write_list, TraceList** read_list, AccessPattern** access_pattern
-		, int* totalbytes);
+		, uint64_t * totalbytes);
 
 // detect contiguous pattern from same process
 int pattern_contig(TraceList** tracelist, AccessPattern** pattern_head, int mpirank);
@@ -111,6 +111,6 @@ int check_pattern_same(AccessPattern* p1, AccessPattern* p2);
 int merge_kd(AccessPattern** kdpattern_head, int k);
 
 // allocate and add a trace to tracelist(a double linked list)
-TraceList* addtmp(int filepos, int size, int op, double startTime, double endTime, int mpirank);
+TraceList* addtmp(uint64_t  filepos, uint64_t  size, int op, double startTime, double endTime, int mpirank);
 
 #endif

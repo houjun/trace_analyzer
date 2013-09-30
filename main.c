@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
 
 	char pname[10][20] = {"CONTIGUOUS","REPEAT","KD_STRIDED","SEQUENTIAL"};
 	char oname[4][32] = {"ADIO_READ","ADIO_WRITE","ADIO_READS","ADIO_WRITES"};
-	int totalbytes = 0;
+	uint64_t totalbytes = 0;
 	int totalpatterncnt = 0;
 	int i = 0;
 
@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
 		printf("Error Reading File\n");
 
 	//output pattern list
-	fprintf(fp,"%d\n%d\nOP            Pattern \t   MPIRank  StartTime    EndTime    #      Start    End   AccessSize #records StrideSize\n"
+	fprintf(fp,"%" PRIu64 "\n%d\nOP            Pattern \t   MPIRank  StartTime    EndTime    #      Start    End   AccessSize #records StrideSize\n"
 			, totalbytes, totalpatterncnt);
 
 	int pattern_i = 0;
@@ -123,7 +123,7 @@ int main(int argc, char *argv[]) {
 					five_num_summary[3] = (list_i->reqOffesets[req_arr_size*3/4] + list_i->reqOffesets[req_arr_size*3/4 + 1]) / 2;
 				}
 
-				fprintf(fp,"%10s  %12s %4d %12lf %12lf  1 %8d %8d %8d %8d %8d"
+				fprintf(fp,"%s  %12s %4d %12lf %12lf  1 %" PRIu64 " %" PRIu64 " %8d %" PRIu64 " %" PRIu64 ""
 											,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime
 											, list_i->endTime, list_i->startPos, list_i->endPos,	0, list_i->recordNum[0] ,list_i->strideSize[0]);
 				fprintf(fp," \t (%f, %f, %f, %f, %f) \n"
@@ -131,16 +131,19 @@ int main(int argc, char *argv[]) {
 			}
 			// for strided
 			else if(list_i->k < 2  && list_i->mpiRank == pattern_i){
-				fprintf(fp,"%10s  %12s %4d %12lf %12lf  1 %8d %8d %8d %8d %8d\n"
+				fprintf(fp,"%s  %12s %4d %12lf %12lf  1 %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 " %" PRIu64 "\n"
 								,oname[list_i->operation - 1], pname[list_i->patternType - 1], list_i->mpiRank, list_i->startTime, list_i->endTime
 								, list_i->startPos, list_i->endPos, list_i->reqSize, list_i->recordNum[0] ,list_i->strideSize[0]);
 			}
 			else if(list_i->mpiRank == pattern_i){ //kd strided
-				fprintf(fp,"%10s  %12s\t%4d %12lf %12lf   %d %8d %8d\t",oname[list_i->operation - 1],"KD_STRIDED", list_i->mpiRank, list_i->startTime
+				fprintf(fp,"%s  %12s\t%4d %12lf %12lf   %d %" PRIu64 " %" PRIu64 "\t",oname[list_i->operation - 1],"KD_STRIDED", list_i->mpiRank, list_i->startTime
 						, list_i->endTime, list_i->k, list_i->startPos, list_i->endPos);
 
 				for(i=list_i->k-1; i >= 0;i--){
-					fprintf(fp,"(%d, %d, %d)",list_i->reqSize,list_i->recordNum[i],list_i->strideSize[i]);
+                                    if(i != 0 )
+					fprintf(fp,"(%d, %" PRIu64 ", %" PRIu64 ")",1,list_i->recordNum[i],list_i->strideSize[i]);
+                                    else
+					fprintf(fp,"(%" PRIu64 ", %" PRIu64 ", %" PRIu64 ")",list_i->reqSize,list_i->recordNum[i],list_i->strideSize[i]);
 				}
 				fprintf(fp,"\n");
 			}
