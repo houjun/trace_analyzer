@@ -150,8 +150,8 @@ int main (int argc, char *argv[])
             if(compare_mode == 1) {
                 // use prefetch
 
+                start = MPI_Wtime();
                 if(k == 0) {
-                    start = MPI_Wtime();
                     // first time read, no pattern information known so just normal read
                     MPI_File_read_at( fh, (iorows * io_rank + k * n) * (n+1) * sizeof(MATDATATYPE)
                                       , iostorage, iorows * (n+1), MATMPITYPE, &status );
@@ -164,8 +164,6 @@ int main (int argc, char *argv[])
                                        , prefetch_cache, iorows * (n+1), MATMPITYPE, &request );
                 }
                 else {
-                    start = MPI_Wtime();
-
                     // wait for previous iread(prefetched the predicted next access) complete
                     MPI_Wait(&request, &status);
                     finish  = MPI_Wtime();
@@ -194,6 +192,14 @@ int main (int argc, char *argv[])
 
         }
 
+        MPI_Barrier(MPI_COMM_WORLD);
+        if(my_rank == 0) {
+            io_time_end = MPI_Wtime();
+            printf("I/O time of %d round: %lf\n",k , io_time_end - io_time_start);
+            io_time += io_time_end - io_time_start;
+        }
+
+
         //DEBUG
 /*
         if(my_rank == 0) {
@@ -214,12 +220,6 @@ int main (int argc, char *argv[])
         // Scatter data within a iogroup
         MPI_Scatter(iostorage, myrows * (n+1), MATMPITYPE, allmat, myrows * (n+1), MATMPITYPE, 0, iogroup);
 
-        MPI_Barrier(MPI_COMM_WORLD);
-        if(my_rank == 0) {
-            io_time_end = MPI_Wtime();
-            printf("I/O time of %d round: %lf\n",k , io_time_end - io_time_start);
-            io_time += io_time_end - io_time_start;
-        }
 
 #if DEBUG
     printf("I'm proc%d, n=%d, myrows=%d, mat_num=%d\n", my_rank, n, myrows, mat_num);
@@ -315,8 +315,10 @@ int main (int argc, char *argv[])
     free(mymat);
     free(myx);
     free(x);
-    free(prefetch_cache);
-
+    if(iamionode == 1) {
+        free(prefetch_cache);
+        free(iostorage);
+    }
     MPI_Comm_free(&iogroup);
     MPI_Finalize();
     return 0;
