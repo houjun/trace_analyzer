@@ -6,7 +6,7 @@
 
 #define PRINTMAT 0
 #define DEBUG 0
-#define IORATIO 4
+#define IORATIO 16
 
 #define MATDATATYPE int
 #define MATMPITYPE MPI_INT
@@ -58,6 +58,8 @@ int main (int argc, char *argv[])
     MPI_Comm_size(MPI_COMM_WORLD, &proc_num);
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+
     if(argc < 4) {
         printf("Usage: jacobi mat.bin dim mat_num [enable prefetch]\n");
         return -1;
@@ -88,8 +90,11 @@ int main (int argc, char *argv[])
     // determine I/O nodes
     int iamionode = (my_rank % IORATIO == 0 ? 1:0);
 
+    //if(iamionode==1)
+    //    printf("IONODE Rank:%d\n",my_rank);
+    //
     // I/O nodes rows
-    int iorows = n / IORATIO;
+    int iorows = n /  (proc_num / IORATIO);
 
     // I/O node rank
     int io_rank = my_rank / IORATIO;
@@ -138,9 +143,12 @@ int main (int argc, char *argv[])
     io_time = 0.0;
     compute_time = 0.0;
     double start, finish;
+
     // each round read entire matrix and prefetch next round
     for(k = 0; k < mat_num; k++) {
-      MPI_Barrier(MPI_COMM_WORLD);
+
+        MPI_Barrier(MPI_COMM_WORLD);
+
         // I/O time
         io_time_start = MPI_Wtime();
 
@@ -190,7 +198,7 @@ int main (int argc, char *argv[])
                                   , iostorage, iorows * (n+1), MATMPITYPE, &status );
             }
 
-        }
+        } // if iamionode==1
 
         MPI_Barrier(MPI_COMM_WORLD);
         if(my_rank == 0) {
@@ -210,14 +218,14 @@ int main (int argc, char *argv[])
             	printf("\n");
         	}
         }
-        printf("%d: myrows=%d, iorows=%d\n",my_rank,myrows,iorows);
+        printf("%d: myrows=%d, iorows=%d, n=%d\n",my_rank,myrows,iorows,n);
 */
         // I/O nodes got data, distribute to all nodes
         // MPI_Comm_split
         color = my_rank / IORATIO;
         MPI_Comm_split(MPI_COMM_WORLD, color, my_rank, &iogroup);
 
-        // Scatter data within a iogroup
+        // Scatter data within an iogroup
         MPI_Scatter(iostorage, myrows * (n+1), MATMPITYPE, allmat, myrows * (n+1), MATMPITYPE, 0, iogroup);
 
 
@@ -279,7 +287,7 @@ int main (int argc, char *argv[])
             //        if(my_rank == 0)
             //            printf("iter = %d, bb = %lf\n",iter, allbb);
 
-        } while(allbb>=e);
+        } while(iter<100);
 
         // gather final x for print of each matrix
         MPI_Allgather(myx, myrows, MPI_DOUBLE, x, myrows, MPI_DOUBLE, MPI_COMM_WORLD);
@@ -300,7 +308,7 @@ int main (int argc, char *argv[])
     MPI_File_close( &fh );
 
     if(my_rank == 0) {
-        printf("Total I/O time: %lf  bandwidth: %.2lf MB/s\n", io_time, n*(n+1)*4.0/(io_time*1024*1024));
+        printf("Total I/O time: %lf  bandwidth: %.2lf MB/s\n", io_time, mat_num*n*(n+1)*4.0/(io_time*1024.0*1024.0));
         printf("Total compute time: %lf\n", compute_time);
 
     }
