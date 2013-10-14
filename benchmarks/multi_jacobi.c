@@ -119,7 +119,9 @@ int main (int argc, char *argv[])
     double start, finish;
     // each round read entire matrix and prefetch next round
     for(k = 0; k < mat_num; k++) {
-      MPI_Barrier(MPI_COMM_WORLD);
+
+        MPI_Barrier(MPI_COMM_WORLD);
+        
         // I/O time
         io_time_start = MPI_Wtime();
 
@@ -168,6 +170,7 @@ int main (int argc, char *argv[])
                               , allmat, myrows * (n+1), MPI_INT, &status );
         }
 
+        MPI_Barrier(MPI_COMM_WORLD);
         if(my_rank == 0) {
             io_time_end = MPI_Wtime();
             printf("I/O time of %d round: %lf\n",k , io_time_end - io_time_start);

@@ -44,8 +44,8 @@ int main(int argc, char *argv[])
     t_replay_start = atoi(argv[8]); // "replay" start time step
     t_replay_end = atoi(argv[9]);
 
-
-    printf("b:%d x:%d y:%d z:%d t_start:%d t_end:%d t_replay_start:%d t_replay_start:%d \n",
+    if(my_rank == 0)
+        printf("b:%d x:%d y:%d z:%d t_start:%d t_end:%d t_replay_start:%d t_replay_start:%d \n",
     		b, x, y, z, t_start, t_end, t_replay_start, t_replay_end);
 
     MPI_Info info = MPI_INFO_NULL;
@@ -107,23 +107,19 @@ int main(int argc, char *argv[])
 
         finish = MPI_Wtime();
         if(my_rank == 0) printf("%d: I/O time %lf\n", t, finish - start);
+        total_io += finish - start;
 
         start = MPI_Wtime();
 
         // do some computation here
-        for(n = 0; n < 100; n++){
-            tmp = 0;
-            for(m = 0; m < z * myrows * myonereadsize; m++){
-                tmp++;
-            }
-        }
-    
+        sleep(myrows / 8); 
+        
         finish = MPI_Wtime();
-        if(my_rank == 0) printf("%d: Computation time %lf\n", t, finish - start);
+        //if(my_rank == 0) printf("%d: Computation time %lf\n", t, finish - start);
 
     }
 
-
+/*
     read_cnt = 0;
     for(t = t_replay_start; t < t_replay_end; t++){
 
@@ -146,25 +142,23 @@ int main(int argc, char *argv[])
 
         finish = MPI_Wtime();
         if(my_rank == 0) printf("%d: I/O time %lf\n", t, finish - start);
+        total_io += finish - start;
 
         start = MPI_Wtime();
 
         // do some computation here
-        for(n = 0; n < 100; n++){
-            tmp = 0;
-            for(m = 0; m < z * myrows * myonereadsize; m++){
-                tmp++;
-            }
-        }
+        sleep(myrows / 8);
     
         finish = MPI_Wtime();
-        if(my_rank == 0) printf("%d: Computation time %lf\n", t, finish - start);
+        //if(my_rank == 0) printf("%d: Computation time %lf\n", t, finish - start);
 
     }
 
-
+*/
     err = MPI_File_close(&fh);
     assert(err == MPI_SUCCESS);
+    if(my_rank == 0)
+        printf("Avg reading time: %lf\n",total_io/(t_end-t_start+ t_replay_end-t_replay_start));
 
     /*
     // check read numbers

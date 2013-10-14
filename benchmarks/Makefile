@@ -1,6 +1,6 @@
 CC=mpicc
-CFLAGS=-g
-#CFLAGS=-O3
+#CFLAGS=-g
+CFLAGS=-O2
 RM=rm -f
 
 SRCS=$(wildcard *.c)
